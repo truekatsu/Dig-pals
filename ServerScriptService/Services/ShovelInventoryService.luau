@@ -234,6 +234,7 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 		EquippedShovel = profile.Shovels.Equipped,
 		ToolActive = held,
 		Coins = profile.Coins,
+		TotalCoinsEarned = profile.TotalCoinsEarned or 0,
 		BagLevel = profile.BagLevel,
 		BaseLevel = profile.BaseLevel,
 		Items = itemsCopy,

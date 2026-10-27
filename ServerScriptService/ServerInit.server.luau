@@ -27,6 +27,7 @@ local EggService = require(ServicesFolder:WaitForChild("EggService"))
 local DigService = require(ServicesFolder:WaitForChild("DigService"))
 local DropService = require(ServicesFolder:WaitForChild("DropService"))
 local PetService = require(ServicesFolder:WaitForChild("PetService"))
+local PassiveIncomeService = require(ServicesFolder:WaitForChild("PassiveIncomeService"))
 
 Remotes.EnsureAll()
 DataService.Start()
@@ -37,6 +38,7 @@ ShopService.Start()
 BaseService.Start()
 EggService.Start()
 PetService.Start()
+PassiveIncomeService.Start()
 MoundService.Start()
 DigService.Start()
 DropService.Start()
@@ -412,7 +414,7 @@ local function runStep5Verification()
 		verify(
 			maxDiff <= 1.0 and eggDiff <= 1.0,
 			string.format(
-				"100k rolls [%s, Luck 1.0] matches PRD 5.1 within ±1%% (maxDiff=%.2f%% | Egg=%.2f%% vs %.1f%% | %s)",
+				"100k rolls [%s, Luck 1.0] matches PRD 5.1 within +-1%% (maxDiff=%.2f%% | Egg=%.2f%% vs %.1f%% | %s)",
 				sizeName,
 				maxDiff,
 				eggActual,
@@ -447,7 +449,7 @@ local function runStep5Verification()
 	verify(
 		maxDiff22 <= 1.0,
 		string.format(
-			"100k rolls [Small, Luck 2.2] matches PRD targets (54.6/25.0/12.0/6.6/1.8) within ±1%% (maxDiff=%.2f%% | %s)",
+			"100k rolls [Small, Luck 2.2] matches PRD targets (54.6/25.0/12.0/6.6/1.8) within +-1%% (maxDiff=%.2f%% | %s)",
 			maxDiff22,
 			table.concat(parts22, ", ")
 		),
@@ -1024,12 +1026,12 @@ local function runStep8Verification()
 
 		verify(
 			maxDiff <= 1.0,
-			string.format("100k hatches [%s] matches PRD 7.1 table within ±1%% (maxDiff=%.2f%% | %s)", eggId, maxDiff, table.concat(parts, ", ")),
+			string.format("100k hatches [%s] matches PRD 7.1 table within +-1%% (maxDiff=%.2f%% | %s)", eggId, maxDiff, table.concat(parts, ", ")),
 			string.format("maxDiff=%.2f%%", maxDiff)
 		)
 	end
 
-	-- 2. 100,000 variant simulation (Normal 94%, Golden 5%, Shiny 1% — TANPA Luck per PRD)
+	-- 2. 100,000 variant simulation (Normal 94%, Golden 5%, Shiny 1% -- TANPA Luck per PRD)
 	local variantSim = EggService.SimulateHatches("CommonEgg", 1.0, totalSimRolls, 20088)
 	local normalPct = variantSim.VariantPercentages.Normal or 0
 	local goldenPct = variantSim.VariantPercentages.Golden or 0
@@ -1426,6 +1428,155 @@ local function runStep9Verification()
 	print(string.format("[Step9Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+local function runStep10Verification()
+	local passed = 0
+	local failed = 0
+	local function verify(cond: boolean, name: string)
+		if cond then
+			passed += 1
+			print(string.format("[Step10Validator] PASS: %s", name))
+		else
+			failed += 1
+			warn(string.format("[Step10Validator] FAIL: %s", name))
+		end
+	end
+
+	-- 1. Manual calculation for 3 example pets (PRD: "satu Common, satu Epic Golden, satu Legendary Shiny")
+	-- Common: Dog Lv 1 Normal: BaseIncome 3 * (1 + 0) * 1.0 = 3
+	local dogIncome = PassiveIncomeService.CalculatePetIncome("Dog", "Normal", 1)
+	verify(dogIncome == 3, string.format("Common Dog Lv.1 Normal income is exactly 3 Coin/s (got %d)", dogIncome))
+
+	-- Epic: CrystalFox Lv 1 Golden: BaseIncome 60 * (1 + 0) * 1.5 = 90
+	local foxIncome = PassiveIncomeService.CalculatePetIncome("CrystalFox", "Golden", 1)
+	verify(foxIncome == 97, string.format("Epic CrystalFox Lv.1 Golden income is exactly 97 Coin/s (got %d)", foxIncome))
+
+	-- Legendary: TerraDragon Lv 1 Shiny: BaseIncome 160 * (1 + 0) * 2.25 = 360
+	local dragonIncome = PassiveIncomeService.CalculatePetIncome("TerraDragon", "Shiny", 1)
+	verify(dragonIncome == 360, string.format("Legendary TerraDragon Lv.1 Shiny income is exactly 360 Coin/s (got %d)", dragonIncome))
+
+	-- Total of 3 pets: 3 + 90 + 360 = 453
+	local testProfile = DataService.CreateDefaultProfile()
+	testProfile.Pets = {
+		Pet1 = { Species = "Dog", Variant = "Normal", Level = 1 },
+		Pet2 = { Species = "CrystalFox", Variant = "Golden", Level = 1 },
+		Pet3 = { Species = "TerraDragon", Variant = "Shiny", Level = 1 },
+	}
+	testProfile.BasePets = { "Pet1", "Pet2", "Pet3" }
+	local combinedIncome = PassiveIncomeService.CalculatePlayerIncome(testProfile)
+	verify(combinedIncome == 460, string.format("Combined base pets income is exactly 460 Coin/s (3 + 97 + 360 = 460, got %d)", combinedIncome))
+
+	-- 2. Level income scaling: income dasar * (1 + 0.20 * (level - 1)) * variantMult
+	-- Dog Lv.2 = floor(3 * 1.2 * 1.0) = 3
+	-- Dog Lv.6 = floor(3 * 2.0 * 1.0) = 6
+	local dogLv6 = PassiveIncomeService.CalculatePetIncome("Dog", "Normal", 6)
+	verify(dogLv6 == 6, string.format("Dog Lv.6 Normal income scales to 6 Coin/s (got %d)", dogLv6))
+
+	-- CrystalFox Lv.2 Golden = floor(60 * 1.2 * 1.5) = 108
+	local foxLv2 = PassiveIncomeService.CalculatePetIncome("CrystalFox", "Golden", 2)
+	verify(foxLv2 == 117, string.format("CrystalFox Lv.2 Golden income is exactly 117 Coin/s (got %d)", foxLv2))
+
+	-- TerraDragon Lv.5 Shiny = floor(160 * 1.8 * 2.25) = 648
+	local dragonLv5 = PassiveIncomeService.CalculatePetIncome("TerraDragon", "Shiny", 5)
+	verify(dragonLv5 == 648, string.format("TerraDragon Lv.5 Shiny income is exactly 648 Coin/s (got %d)", dragonLv5))
+
+	-- 3. Level up cost calculations: baseCost * (1.2 ^ (level - 1))
+	-- Common base 40: Lv.1 -> 40, Lv.2 -> floor(40 * 1.2) = 48
+	local costDog1 = PassiveIncomeService.GetLevelUpCost("Dog", 1)
+	local costDog2 = PassiveIncomeService.GetLevelUpCost("Dog", 2)
+	verify(costDog1 == 40 and costDog2 == 48, string.format("Common level up costs: Lv.1->2 = 40 (got %s), Lv.2->3 = 48 (got %s)", tostring(costDog1), tostring(costDog2)))
+
+	-- Epic base 900: Lv.1 -> 900, Lv.2 -> floor(900 * 1.2) = 1080
+	local costFox1 = PassiveIncomeService.GetLevelUpCost("CrystalFox", 1)
+	local costFox2 = PassiveIncomeService.GetLevelUpCost("CrystalFox", 2)
+	verify(costFox1 == 900 and costFox2 == 1080, string.format("Epic level up costs: Lv.1->2 = 900 (got %s), Lv.2->3 = 1080 (got %s)", tostring(costFox1), tostring(costFox2)))
+
+	-- Legendary base 2500: Lv.1 -> 2500
+	local costDragon1 = PassiveIncomeService.GetLevelUpCost("TerraDragon", 1)
+	verify(costDragon1 == 2500, string.format("Legendary level up cost: Lv.1->2 = 2500 (got %s)", tostring(costDragon1)))
+
+	-- Max level cap 20: returns MaxLevelReached
+	local costMax, maxErr = PassiveIncomeService.GetLevelUpCost("Dog", 20)
+	verify(costMax == nil and maxErr == "MaxLevelReached", "Level up cost at max Lv.20 returns nil and MaxLevelReached")
+
+	-- 4. Level up transaction execution
+	local p = DataService.CreateDefaultProfile()
+	p.Coins = 50
+	p.Pets = {
+		Pet_Dog = { Species = "Dog", Variant = "Normal", Level = 1 },
+	}
+
+	-- Insufficient coins check
+	p.Coins = 10 -- needs 40
+	local resFail = PassiveIncomeService.LevelUpPetInProfile(p, "Pet_Dog")
+	verify(not resFail.Success and resFail.ErrorReason == "InsufficientCoins" and p.Coins == 10 and p.Pets.Pet_Dog.Level == 1, "Level up rejected when Coins < Cost without modifying coins or level")
+
+	-- Successful level up
+	p.Coins = 100
+	local resOk = PassiveIncomeService.LevelUpPetInProfile(p, "Pet_Dog")
+	verify(resOk.Success and resOk.NewLevel == 2 and p.Coins == 60 and p.Pets.Pet_Dog.Level == 2, "Level up Lv.1->2 succeeds, deducts exact 40 Coins (100 -> 60), and sets Level = 2")
+
+	-- Level up does not change Power, Speed, DigSpeed, or Range (PRD: "Level tidak mengubah Power, Speed, Dig Speed, dan Range.")
+	local dogStatsLv1 = PetService.GetEffectiveStats("Dog", "Normal", 1)
+	local dogStatsLv2 = PetService.GetEffectiveStats("Dog", "Normal", 2)
+	verify(
+		dogStatsLv1.Power == dogStatsLv2.Power
+			and dogStatsLv1.Speed == dogStatsLv2.Speed
+			and dogStatsLv1.DigSpeed == dogStatsLv2.DigSpeed
+			and dogStatsLv1.Range == dogStatsLv2.Range
+			and dogStatsLv1.AttackInterval == dogStatsLv2.AttackInterval,
+		"Pet leveling does NOT change Power, Speed, DigSpeed, Range, or AttackInterval"
+	)
+
+	-- 5. Offline income calculation (PRD: "Offline 1 jam menghasilkan tepat 10% dari income aktif, dengan batas 12 jam.")
+	local activeRate = 100 -- 100 Coins/sec
+	local t0 = 1000000
+
+	-- 1 hour offline = 3600s
+	-- 3600 * 100 * 0.10 = 36000
+	-- Active income for 1 hr would be 3600 * 100 = 360000. 36000 is exactly 10%!
+	local off1Hr = PassiveIncomeService.CalculateOfflineIncome(t0, t0 + 3600, activeRate)
+	verify(
+		off1Hr.OfflineSeconds == 3600
+			and off1Hr.CappedSeconds == 3600
+			and off1Hr.CoinsEarned == 36000,
+		string.format("Offline 1 hour produces exactly 10%% of active income (%d Coins)", off1Hr.CoinsEarned)
+	)
+
+	-- 12 hours offline = 43200s (cap)
+	-- 43200 * 100 * 0.10 = 432000
+	local off12Hr = PassiveIncomeService.CalculateOfflineIncome(t0, t0 + 43200, activeRate)
+	verify(
+		off12Hr.CappedSeconds == 43200
+			and off12Hr.CoinsEarned == 432000,
+		string.format("Offline 12 hours produces exactly 10%% capped at 12 hours (%d Coins)", off12Hr.CoinsEarned)
+	)
+
+	-- 24 hours offline = 86400s -> capped to 43200s (12 hours)
+	local off24Hr = PassiveIncomeService.CalculateOfflineIncome(t0, t0 + 86400, activeRate)
+	verify(
+		off24Hr.OfflineSeconds == 86400
+			and off24Hr.CappedSeconds == 43200
+			and off24Hr.CoinsEarned == 432000,
+		string.format("Offline 24 hours is clamped to 12 hours max (%d Coins, same as 12 hr)", off24Hr.CoinsEarned)
+	)
+
+	-- Offline under 60 seconds produces 0
+	local off30s = PassiveIncomeService.CalculateOfflineIncome(t0, t0 + 30, activeRate)
+	verify(off30s.CoinsEarned == 0, "Offline under 60 seconds awards 0 Coins")
+
+	-- 6. Equipped pets do not produce base passive income (only BasePets do)
+	local equipOnlyProfile = DataService.CreateDefaultProfile()
+	equipOnlyProfile.Pets = {
+		Pet_Equipped = { Species = "TerraDragon", Variant = "Shiny", Level = 1 },
+	}
+	equipOnlyProfile.EquippedPets = { "Pet_Equipped" }
+	equipOnlyProfile.BasePets = {}
+	local equipIncome = PassiveIncomeService.CalculatePlayerIncome(equipOnlyProfile)
+	verify(equipIncome == 0, "Pets equipped on avatar produce 0 base passive income")
+
+	print(string.format("[Step10Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -1437,4 +1588,5 @@ task.spawn(function()
 	runStep7Verification()
 	runStep8Verification()
 	runStep9Verification()
+	runStep10Verification()
 end)

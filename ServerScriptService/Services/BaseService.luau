@@ -431,6 +431,7 @@ function BaseService.AssignPlot(player: Player): string?
 
 	assignedPlotsByUserId[player.UserId] = chosenName
 	assignedUsersByPlotName[chosenName] = player.UserId
+	player:SetAttribute("AssignedPlot", chosenName)
 
 	local plotFolder = basePlots:FindFirstChild(chosenName)
 	if plotFolder and plotFolder:IsA("Folder") then
@@ -457,6 +458,7 @@ function BaseService.FreePlot(player: Player)
 
 	assignedPlotsByUserId[player.UserId] = nil
 	assignedUsersByPlotName[plotName] = nil
+	player:SetAttribute("AssignedPlot", nil)
 
 	local basePlots = workspace:FindFirstChild("BasePlots")
 	local plotFolder = basePlots and basePlots:FindFirstChild(plotName)

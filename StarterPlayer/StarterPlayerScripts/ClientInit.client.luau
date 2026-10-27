@@ -10,6 +10,7 @@ local ShovelShopController = require(Controllers:WaitForChild("ShovelShopControl
 local BaseController = require(Controllers:WaitForChild("BaseController"))
 local PetBagController = require(Controllers:WaitForChild("PetBagController"))
 local PetVisualController = require(Controllers:WaitForChild("PetVisualController"))
+local OfflineIncomeController = require(Controllers:WaitForChild("OfflineIncomeController"))
 local DigController = require(Controllers:WaitForChild("DigController"))
 
 MoundVisuals.Start()
@@ -20,4 +21,5 @@ ShovelShopController.Start()
 BaseController.Start()
 PetBagController.Start()
 PetVisualController.Start()
+OfflineIncomeController.Start()
 DigController.Start()

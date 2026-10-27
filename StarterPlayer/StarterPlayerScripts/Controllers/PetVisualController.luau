@@ -33,6 +33,21 @@ type VisualPetState = {
 	AttackStartedAt: number,
 }
 
+type BasePetVisualState = {
+	Guid: string,
+	Species: string,
+	Variant: Types.PetVariantName,
+	Level: number,
+	Speed: number,
+	MoveSpeed: number,
+	Model: Model,
+	RootPart: BasePart,
+	CurrentPos: Vector3,
+	TargetPos: Vector3,
+	NextMoveTime: number,
+	GroundPart: BasePart?,
+}
+
 local SPECIES_EMOJIS: { [string]: string } = {
 	Dog = utf8.char(0x1F436),
 	Cat = utf8.char(0x1F431),
@@ -77,9 +92,12 @@ local FORMATION_OFFSETS = {
 }
 
 local petVisualFolder: Folder? = nil
+local basePetVisualFolder: Folder? = nil
 local activeVisuals: { [string]: VisualPetState } = {}
+local activeBaseVisuals: { [string]: BasePetVisualState } = {}
 local ownedPets: { [string]: Types.PetInstance } = {}
 local equippedPetGuids: { string } = {}
+local basePetGuids: { string } = {}
 local started = false
 
 local function getRarityColor(rarityName: string): Color3
@@ -275,6 +293,101 @@ local function syncVisualPets()
 	end
 end
 
+-- Helper: Find assigned base plot ground for local player
+local function getLocalPlotGround(): BasePart?
+	local assignedPlot = LocalPlayer:GetAttribute("AssignedPlot")
+	local basePlots = workspace:FindFirstChild("BasePlots")
+	if not basePlots then
+		return nil
+	end
+
+	if type(assignedPlot) == "string" and #assignedPlot > 0 then
+		local plotFolder = basePlots:FindFirstChild(assignedPlot)
+		if plotFolder and plotFolder:IsA("Folder") then
+			for _, child in ipairs(plotFolder:GetChildren()) do
+				if child:IsA("BasePart") and string.find(child.Name, "_Ground$") then
+					return child
+				end
+			end
+		end
+	end
+
+	-- Fallback: check plots with OwnerUserId == LocalPlayer.UserId
+	for _, folder in ipairs(basePlots:GetChildren()) do
+		if folder:IsA("Folder") and folder:GetAttribute("OwnerUserId") == LocalPlayer.UserId then
+			for _, child in ipairs(folder:GetChildren()) do
+				if child:IsA("BasePart") and string.find(child.Name, "_Ground$") then
+					return child
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+-- Synchronize active base roaming pets
+local function syncBasePets()
+	local activeGuids: { [string]: boolean } = {}
+	local ground = getLocalPlotGround()
+
+	for _, guid in ipairs(basePetGuids) do
+		activeGuids[guid] = true
+		local petData = ownedPets[guid]
+		if petData and not activeBaseVisuals[guid] then
+			local speciesCfg = PetsConfig.Species[petData.Species]
+			local speed = if speciesCfg then speciesCfg.Speed else 2
+			local moveSpeed = PetsConfig.BaseMoveSpeedStuds + (PetsConfig.MoveSpeedPerStat * speed)
+
+			local spawnPos = Vector3.new(0, 5, 0)
+			if ground then
+				local halfW = math.max(4, (ground.Size.X / 2) - 6)
+				local halfD = math.max(4, (ground.Size.Z / 2) - 6)
+				local gx = (math.random() - 0.5) * 2 * halfW
+				local gz = (math.random() - 0.5) * 2 * halfD
+				spawnPos = Vector3.new(ground.Position.X + gx, ground.Position.Y + (ground.Size.Y / 2) + 1.2, ground.Position.Z + gz)
+			end
+
+			local model, root = createProceduralPetModel(
+				"Base_" .. guid,
+				petData.Species,
+				petData.Variant,
+				petData.Level,
+				spawnPos
+			)
+
+			if basePetVisualFolder then
+				model.Parent = basePetVisualFolder
+			end
+
+			activeBaseVisuals[guid] = {
+				Guid = guid,
+				Species = petData.Species,
+				Variant = petData.Variant,
+				Level = petData.Level,
+				Speed = speed,
+				MoveSpeed = moveSpeed,
+				Model = model,
+				RootPart = root,
+				CurrentPos = root.Position,
+				TargetPos = root.Position,
+				NextMoveTime = os.clock() + math.random(2, 5),
+				GroundPart = ground,
+			}
+		end
+	end
+
+	-- Remove unassigned base pets
+	for guid, visual in pairs(activeBaseVisuals) do
+		if not activeGuids[guid] then
+			if visual.Model then
+				visual.Model:Destroy()
+			end
+			activeBaseVisuals[guid] = nil
+		end
+	end
+end
+
 -- Play damage hit effect at mound position
 local function spawnHitEffect(pos: Vector3, damage: number)
 	local part = Instance.new("Part")
@@ -330,8 +443,12 @@ function PetVisualController.ApplySnapshot(payload: any)
 	if type(payload.EquippedPets) == "table" then
 		equippedPetGuids = payload.EquippedPets
 	end
+	if type(payload.BasePets) == "table" then
+		basePetGuids = payload.BasePets
+	end
 
 	syncVisualPets()
+	syncBasePets()
 end
 
 function PetVisualController.Start()
@@ -347,6 +464,14 @@ function PetVisualController.Start()
 		folder.Parent = workspace
 	end
 	petVisualFolder = folder :: Folder
+
+	local baseFolder = workspace:FindFirstChild("ClientBasePetVisuals")
+	if not baseFolder then
+		baseFolder = Instance.new("Folder")
+		baseFolder.Name = "ClientBasePetVisuals"
+		baseFolder.Parent = workspace
+	end
+	basePetVisualFolder = baseFolder :: Folder
 
 	-- Listen for StateSync
 	Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(payload: any)
@@ -437,6 +562,44 @@ function PetVisualController.Start()
 					end
 				else
 					visual.RootPart.Position = nextPos
+				end
+			end
+		end
+
+		-- Base pets roaming in plot
+		for _, visual in pairs(activeBaseVisuals) do
+			if visual and visual.RootPart and visual.RootPart.Parent then
+				local ground = visual.GroundPart or getLocalPlotGround()
+				visual.GroundPart = ground
+
+				if ground and (now >= visual.NextMoveTime or (visual.TargetPos - visual.CurrentPos).Magnitude < 0.6) then
+					local halfW = math.max(4, (ground.Size.X / 2) - 6)
+					local halfD = math.max(4, (ground.Size.Z / 2) - 6)
+					local gx = (math.random() - 0.5) * 2 * halfW
+					local gz = (math.random() - 0.5) * 2 * halfD
+					local targetY = ground.Position.Y + (ground.Size.Y / 2) + 1.2
+					visual.TargetPos = Vector3.new(ground.Position.X + gx, targetY, ground.Position.Z + gz)
+					visual.NextMoveTime = now + math.random(3, 7)
+				end
+
+				local moveDiff = visual.TargetPos - visual.CurrentPos
+				local dist = moveDiff.Magnitude
+				local maxStep = visual.MoveSpeed * dt * 0.7
+				local nextPos = if dist <= maxStep then visual.TargetPos else visual.CurrentPos + (moveDiff.Unit * maxStep)
+				local hoverBob = math.sin((now * 3.0) + (string.byte(visual.Guid, #visual.Guid) or 1)) * 0.15
+				local finalPos = nextPos + Vector3.new(0, hoverBob, 0)
+				visual.CurrentPos = nextPos
+
+				if dist > 0.1 then
+					local lookDir = moveDiff.Unit
+					local cf = CFrame.lookAt(finalPos, finalPos + lookDir)
+					visual.RootPart.CFrame = cf
+					local face = visual.Model:FindFirstChild("FaceAccent") :: BasePart?
+					if face then
+						face.CFrame = cf * CFrame.new(0, 0.1, -0.81)
+					end
+				else
+					visual.RootPart.Position = finalPos
 				end
 			end
 		end

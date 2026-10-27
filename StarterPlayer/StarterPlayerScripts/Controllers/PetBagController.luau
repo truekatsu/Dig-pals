@@ -111,19 +111,21 @@ local detailStatusBanner: TextLabel? = nil
 local equipButton: TextButton? = nil
 local baseButton: TextButton? = nil
 local releaseButton: TextButton? = nil
+local levelUpButton: TextButton? = nil
 
 local function getRarityColor(rarityName: string): Color3
 	local info = (RarityConfig.ById :: any)[rarityName]
 	return if info then info.Color else RarityConfig.ById.Common.Color
 end
 
-local function computeEffectiveStats(speciesId: string, variant: Types.PetVariantName)
+local function computeEffectiveStats(speciesId: string, variant: Types.PetVariantName, level: number?)
 	local speciesCfg = PetsConfig.Species[speciesId]
 	if not speciesCfg then
 		return nil
 	end
 	local variantCfg = (PetsConfig.Variants :: any)[variant] or PetsConfig.Variants.Normal
 
+	local safeLevel = math.clamp(level or 1, 1, PetsConfig.MaxPetLevel)
 	local effPower = math.floor(speciesCfg.Power * variantCfg.PowerMultiplier)
 	local effDigSpeed = math.min(PetsConfig.MaxEffectiveDigSpeed, speciesCfg.DigSpeed + variantCfg.DigSpeedBonus)
 	local effSpeed = speciesCfg.Speed
@@ -131,7 +133,8 @@ local function computeEffectiveStats(speciesId: string, variant: Types.PetVarian
 	local interval = math.max(0.25, PetsConfig.BaseAttackInterval - (PetsConfig.AttackIntervalReductionPerDigSpeed * effDigSpeed))
 	local moveSpeed = PetsConfig.BaseMoveSpeedStuds + (PetsConfig.MoveSpeedPerStat * effSpeed)
 	local releasePrice = PetsConfig.ReleasePriceByRarity[speciesCfg.Rarity] or 25
-	local income = speciesCfg.BaseIncome * variantCfg.IncomeMultiplier
+	local levelBonus = 1.0 + (PetsConfig.LevelIncomeBonusPerLevel * (safeLevel - 1))
+	local income = math.floor(speciesCfg.BaseIncome * levelBonus * variantCfg.IncomeMultiplier)
 
 	return {
 		SpeciesCfg = speciesCfg,
@@ -144,7 +147,22 @@ local function computeEffectiveStats(speciesId: string, variant: Types.PetVarian
 		MoveSpeed = moveSpeed,
 		ReleasePrice = releasePrice,
 		Income = income,
+		Level = safeLevel,
 	}
+end
+
+local function getLevelUpCost(speciesId: string, currentLevel: number): (number?, string?)
+	local speciesCfg = PetsConfig.Species[speciesId]
+	if not speciesCfg then
+		return nil, "InvalidSpecies"
+	end
+	local safeLevel = currentLevel or 1
+	if safeLevel >= PetsConfig.MaxPetLevel then
+		return nil, "MaxLevelReached"
+	end
+	local baseCost = PetsConfig.LevelUpBaseCostByRarity[speciesCfg.Rarity] or 40
+	local cost = math.floor(baseCost * (PetsConfig.LevelUpCostGrowthFactor ^ (safeLevel - 1)))
+	return math.max(1, cost), nil
 end
 
 local function updateResponsiveScale()
@@ -205,11 +223,14 @@ local function refreshDetailPane()
 		if releaseButton then
 			releaseButton.Visible = false
 		end
+		if levelUpButton then
+			levelUpButton.Visible = false
+		end
 		return
 	end
 
 	local pet = ownedPets[selectedPetGuid]
-	local stats = computeEffectiveStats(pet.Species, pet.Variant)
+	local stats = computeEffectiveStats(pet.Species, pet.Variant, pet.Level)
 	if not stats then
 		return
 	end
@@ -254,7 +275,7 @@ local function refreshDetailPane()
 		local variantDigBonus = if stats.VariantCfg.DigSpeedBonus > 0 then string.format(" (+%d)", stats.VariantCfg.DigSpeedBonus) else ""
 
 		detailStatsLabel.Text = string.format(
-			"Power: %d%s\nDig Speed: %d/10%s (Jeda: %.2fs)\nMove Speed: %d studs/dtk\nJangkauan (Range): %d studs\nIncome: +%d Coin/dtk\nLevel: %d",
+			"Power: %d%s\nDig Speed: %d/10%s (Jeda: %.2fs)\nMove Speed: %d studs/dtk\nJangkauan (Range): %d studs\nIncome: +%d Coin/dtk\nLevel: %d/20",
 			stats.Power,
 			variantPowerBonus,
 			stats.DigSpeed,
@@ -263,8 +284,30 @@ local function refreshDetailPane()
 			stats.MoveSpeed,
 			stats.Range,
 			stats.Income,
-			pet.Level
+			pet.Level or 1
 		)
+	end
+
+	-- 0. Level Up button
+	if levelUpButton then
+		levelUpButton.Visible = true
+		local currentLevel = pet.Level or 1
+		local cost, err = getLevelUpCost(pet.Species, currentLevel)
+		local playerCoins = LocalPlayer:GetAttribute("Coins") or 0
+
+		if currentLevel >= PetsConfig.MaxPetLevel then
+			levelUpButton.Text = "MAX LEVEL (Lv. 20)"
+			levelUpButton.BackgroundColor3 = COLORS.BtnDisabled
+			levelUpButton.Active = false
+		elseif cost and playerCoins < cost then
+			levelUpButton.Text = string.format("LEVEL UP (Lv. %d -> %d) - %s Coin", currentLevel, currentLevel + 1, Format.Commas(cost))
+			levelUpButton.BackgroundColor3 = COLORS.BtnDisabled
+			levelUpButton.Active = false
+		elseif cost then
+			levelUpButton.Text = string.format("LEVEL UP (Lv. %d -> %d) - %s Coin", currentLevel, currentLevel + 1, Format.Commas(cost))
+			levelUpButton.BackgroundColor3 = Color3.fromRGB(46, 178, 106)
+			levelUpButton.Active = not isBusy
+		end
 	end
 
 	-- 1. Equip / Unequip button
@@ -425,7 +468,7 @@ local function rebuildPetList()
 		end
 
 		renderOrder += 1
-		local stats = computeEffectiveStats(pet.Species, pet.Variant)
+		local stats = computeEffectiveStats(pet.Species, pet.Variant, pet.Level)
 		local rarityColor = if stats then getRarityColor(stats.SpeciesCfg.Rarity) else COLORS.TextSecondary
 		local isSelected = (guid == selectedPetGuid)
 
@@ -499,7 +542,7 @@ local function rebuildPetList()
 		metaLabel.TextColor3 = COLORS.TextSecondary
 
 		local variantTag = if pet.Variant == "Golden" then "[GOLDEN] " elseif pet.Variant == "Shiny" then "[SHINY] " else ""
-		metaLabel.Text = string.format("%sPower %d | Dig %d", variantTag, stats and stats.Power or 0, stats and stats.DigSpeed or 0)
+		metaLabel.Text = string.format("%sLv. %d | Power %d | Dig %d", variantTag, pet.Level or 1, stats and stats.Power or 0, stats and stats.DigSpeed or 0)
 		metaLabel.Parent = row
 
 		-- Status Pill Badge
@@ -745,6 +788,40 @@ function PetBagController.RequestRelease()
 		local msg = if ok and type(response) == "table" and type(response.Message) == "string"
 			then response.Message
 			else "Gagal melepaskan pet."
+		setStatusMessage(msg, true)
+	end
+
+	rebuildPetList()
+end
+
+function PetBagController.RequestLevelUp()
+	if isBusy or not selectedPetGuid then
+		return
+	end
+	local pet = ownedPets[selectedPetGuid]
+	if not pet then
+		return
+	end
+
+	isBusy = true
+	setStatusMessage("Menaikkan level pet...", false)
+	rebuildPetList()
+
+	local ok, response = pcall(function()
+		return Remotes.GetFunction("LevelUpPet"):InvokeServer(selectedPetGuid)
+	end)
+
+	isBusy = false
+
+	if ok and type(response) == "table" and response.Success == true then
+		local newLv = response.NewLevel or ((pet.Level or 1) + 1)
+		pet.Level = newLv
+		setStatusMessage(string.format("Level up berhasil! Pet kini Lv. %d", newLv), false)
+	else
+		local reason = if ok and type(response) == "table" and response.ErrorReason then response.ErrorReason else "Gagal level up"
+		local msg = if reason == "InsufficientCoins" then "Coin tidak cukup untuk level up!"
+			elseif reason == "MaxLevelReached" then "Pet sudah mencapai level maksimal (Lv. 20)!"
+			else reason
 		setStatusMessage(msg, true)
 	end
 
@@ -1164,13 +1241,35 @@ local function buildPetBagGui()
 	actionsFrame.Name = "Actions"
 	actionsFrame.AnchorPoint = Vector2.new(0.5, 1)
 	actionsFrame.Position = UDim2.new(0.5, 0, 1, -12)
-	actionsFrame.Size = UDim2.new(1, -24, 0, 114)
+	actionsFrame.Size = UDim2.new(1, -24, 0, 154)
 	actionsFrame.BackgroundTransparency = 1
 	actionsFrame.Parent = rightFrame
 
 	local actionsLayout = Instance.new("UIListLayout")
 	actionsLayout.Padding = UDim.new(0, 6)
 	actionsLayout.Parent = actionsFrame
+
+	-- 0. Level Up Button
+	local lvBtn = Instance.new("TextButton")
+	lvBtn.Name = "LevelUpButton"
+	lvBtn.Size = UDim2.new(1, 0, 0, 34)
+	lvBtn.BackgroundColor3 = Color3.fromRGB(46, 178, 106)
+	lvBtn.BorderSizePixel = 0
+	lvBtn.Font = Enum.Font.GothamBlack
+	lvBtn.TextSize = 12
+	lvBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lvBtn.Text = "LEVEL UP"
+	lvBtn.Visible = false
+	lvBtn.Parent = actionsFrame
+	levelUpButton = lvBtn
+
+	local lvbCorner = Instance.new("UICorner")
+	lvbCorner.CornerRadius = UDim.new(0, 8)
+	lvbCorner.Parent = lvBtn
+
+	lvBtn.Activated:Connect(function()
+		PetBagController.RequestLevelUp()
+	end)
 
 	-- 1. Equip Button
 	local eqBtn = Instance.new("TextButton")

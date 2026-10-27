@@ -17,6 +17,7 @@ local LocalPlayer = Players.LocalPlayer
 local HudController = {}
 
 local coinsValue: number = EconomyConfig.StartingCoins
+local incomeValue: number = 0
 local bagCountValue: number = 0
 local bagCapacityValue: number = EconomyConfig.BagLevels[1].Capacity
 local bagLevelValue: number = 1
@@ -31,6 +32,7 @@ local screenGui: ScreenGui? = nil
 local uiScale: UIScale? = nil
 local coinsTextLabel: TextLabel? = nil
 local coinsScaleInst: UIScale? = nil
+local incomeTextLabel: TextLabel? = nil
 local bagTextLabel: TextLabel? = nil
 local bagLevelBadge: TextLabel? = nil
 local bagFillFrame: Frame? = nil
@@ -55,6 +57,14 @@ end
 local function refreshHudVisuals(animateCoinPop: boolean?)
 	if coinsTextLabel then
 		coinsTextLabel.Text = Format.Commas(coinsValue)
+	end
+	if incomeTextLabel then
+		if incomeValue > 0 then
+			incomeTextLabel.Text = string.format("+%s/dtk", Format.Commas(incomeValue))
+			incomeTextLabel.Visible = true
+		else
+			incomeTextLabel.Visible = false
+		end
 	end
 	if animateCoinPop and coinsScaleInst then
 		coinsScaleInst.Scale = 1.12
@@ -112,6 +122,11 @@ local function syncFromAttributes(animateCoins: boolean?)
 	local prevCoins = coinsValue
 	if type(attrCoins) == "number" then
 		coinsValue = attrCoins
+	end
+
+	local attrIncome = LocalPlayer:GetAttribute("IncomePerSecond")
+	if type(attrIncome) == "number" then
+		incomeValue = attrIncome
 	end
 
 	local attrBagCount = LocalPlayer:GetAttribute("BagItemCount")
@@ -183,7 +198,7 @@ function HudController.ShowDropSummary(summary: any)
 	headerText.TextSize = 12
 	headerText.TextColor3 = Color3.fromRGB(255, 225, 110)
 	headerText.TextStrokeTransparency = 0.35
-	headerText.Text = string.format("HASIL GALIAN • TIMING %d%% • LUCK %.2fx", timingPct, effLuck)
+	headerText.Text = string.format("HASIL GALIAN | TIMING %d%% | LUCK %.2fx", timingPct, effLuck)
 	headerText.Parent = headerPill
 
 	local headerScale = Instance.new("UIScale")
@@ -263,7 +278,7 @@ function HudController.ShowDropSummary(summary: any)
 		else
 			subLabel.TextColor3 = rarityColor
 			subLabel.Text = string.format(
-				"%s • Nilai Jual: %s Coin",
+				"%s | Nilai Jual: %s Coin",
 				rarityName,
 				Format.Commas(tonumber(drop.SellPrice) or 0)
 			)
@@ -370,7 +385,7 @@ local function buildHudGui()
 	local coinsLbl = Instance.new("TextLabel")
 	coinsLbl.Name = "CoinsValue"
 	coinsLbl.Position = UDim2.fromOffset(42, 0)
-	coinsLbl.Size = UDim2.new(1, -50, 1, 0)
+	coinsLbl.Size = UDim2.new(1, -112, 1, 0)
 	coinsLbl.BackgroundTransparency = 1
 	coinsLbl.Font = Enum.Font.GothamBlack
 	coinsLbl.TextSize = 17
@@ -379,6 +394,21 @@ local function buildHudGui()
 	coinsLbl.Text = "100"
 	coinsLbl.Parent = coinsCard
 	coinsTextLabel = coinsLbl
+
+	local incomeLbl = Instance.new("TextLabel")
+	incomeLbl.Name = "IncomePerSecond"
+	incomeLbl.AnchorPoint = Vector2.new(1, 0.5)
+	incomeLbl.Position = UDim2.new(1, -8, 0.5, 0)
+	incomeLbl.Size = UDim2.fromOffset(66, 20)
+	incomeLbl.BackgroundTransparency = 1
+	incomeLbl.Font = Enum.Font.GothamBold
+	incomeLbl.TextSize = 11
+	incomeLbl.TextColor3 = Color3.fromRGB(80, 227, 120)
+	incomeLbl.TextXAlignment = Enum.TextXAlignment.Right
+	incomeLbl.Text = "+0/dtk"
+	incomeLbl.Visible = false
+	incomeLbl.Parent = coinsCard
+	incomeTextLabel = incomeLbl
 
 	-- 2. Bag Capacity Pill (e.g. Tas 12/20 + Lv.1 + fill bar)
 	local bagCard = Instance.new("Frame")
@@ -532,7 +562,7 @@ function HudController.Start()
 	bindCameraViewport()
 	workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCameraViewport)
 
-	for _, attrName in { "Coins", "BagItemCount", "BagCapacity", "BagLevel", "EggCount", "EggCapacity" } do
+	for _, attrName in { "Coins", "BagItemCount", "BagCapacity", "BagLevel", "EggCount", "EggCapacity", "IncomePerSecond" } do
 		LocalPlayer:GetAttributeChangedSignal(attrName):Connect(function()
 			syncFromAttributes(attrName == "Coins")
 		end)
