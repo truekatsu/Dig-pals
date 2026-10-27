@@ -34,6 +34,8 @@ export type InventorySnapshot = {
 	BaseLevel: number,
 	Items: { [string]: number },
 	EggBag: { Types.EggBagEntry },
+	Incubators: { [number]: Types.IncubatorEntry },
+	Pets: { [string]: Types.PetInstance },
 }
 
 local ShovelInventoryService = {}
@@ -184,6 +186,30 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 			})
 		end
 	end
+	local incubatorsCopy: { [number]: Types.IncubatorEntry } = {}
+	if type(profile.Incubators) == "table" then
+		for slotIdx, entry in profile.Incubators do
+			if type(slotIdx) == "number" and type(entry) == "table" and type(entry.Id) == "string" then
+				incubatorsCopy[slotIdx] = {
+					Id = entry.Id,
+					Rarity = entry.Rarity,
+					ReadyAt = entry.ReadyAt,
+				}
+			end
+		end
+	end
+	local petsCopy: { [string]: Types.PetInstance } = {}
+	if type(profile.Pets) == "table" then
+		for petId, pInst in profile.Pets do
+			if type(petId) == "string" and type(pInst) == "table" and type(pInst.Species) == "string" then
+				petsCopy[petId] = {
+					Species = pInst.Species,
+					Variant = pInst.Variant,
+					Level = pInst.Level,
+				}
+			end
+		end
+	end
 	return {
 		Loaded = true,
 		OwnedShovels = table.clone(profile.Shovels.Owned),
@@ -194,6 +220,8 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 		BaseLevel = profile.BaseLevel,
 		Items = itemsCopy,
 		EggBag = eggsCopy,
+		Incubators = incubatorsCopy,
+		Pets = petsCopy,
 	}
 end
 

@@ -1,12 +1,15 @@
 --!strict
--- Main server bootstrapper for Dig Pals (Steps 1-7: DataService, PlayerState, Remotes, MoundService, DigService, DropService, InventoryService, ShovelInventoryService, ShopService)
+-- Main server bootstrapper for Dig Pals (Steps 1-8: DataService, PlayerState, Remotes, MoundService, DigService, DropService, InventoryService, ShovelInventoryService, ShopService, BaseService, EggService)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local BaseConfig = require(Shared:WaitForChild("Config"):WaitForChild("Base"))
 local Economy = require(Shared:WaitForChild("Config"):WaitForChild("Economy"))
+local EggsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Eggs"))
 local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"))
+local PetsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Pets"))
 local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rarity"))
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
@@ -19,6 +22,8 @@ local InventoryService = require(ServicesFolder:WaitForChild("InventoryService")
 local MoundService = require(ServicesFolder:WaitForChild("MoundService"))
 local ShovelInventoryService = require(ServicesFolder:WaitForChild("ShovelInventoryService"))
 local ShopService = require(ServicesFolder:WaitForChild("ShopService"))
+local BaseService = require(ServicesFolder:WaitForChild("BaseService"))
+local EggService = require(ServicesFolder:WaitForChild("EggService"))
 local DigService = require(ServicesFolder:WaitForChild("DigService"))
 local DropService = require(ServicesFolder:WaitForChild("DropService"))
 
@@ -28,6 +33,8 @@ PlayerState.Start()
 InventoryService.Start()
 ShovelInventoryService.Start()
 ShopService.Start()
+BaseService.Start()
+EggService.Start()
 MoundService.Start()
 DigService.Start()
 DropService.Start()
@@ -974,6 +981,239 @@ local function runStep7Verification()
 	print(string.format("[Step7Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+-- Step 8 automated verification (Base plot assignment, BaseLevel upgrades, incubator placement, speed-up cost, offline incubation, 100k hatch simulation, pet bag limit, and egg selling)
+local function runStep8Verification()
+	local passed = 0
+	local failed = 0
+
+	local function verify(cond: boolean, label: string, detail: string?)
+		if cond then
+			passed += 1
+			print(string.format("[Step8Validator] PASS: %s", label))
+		else
+			failed += 1
+			warn(string.format("[Step8Validator] FAIL: %s (%s)", label, detail or "assertion failed"))
+		end
+	end
+
+	-- 1. 100,000-roll Monte Carlo hatch simulation per egg type (without Luck, Luck = 1.0)
+	local eggExpectedRarities: { [string]: { [Types.RarityName]: number } } = {
+		CommonEgg = { Common = 80, Uncommon = 17, Rare = 2.5, Epic = 0.4, Legendary = 0.1 },
+		UncommonEgg = { Common = 35, Uncommon = 50, Rare = 12, Epic = 2.5, Legendary = 0.5 },
+		RareEgg = { Common = 10, Uncommon = 30, Rare = 45, Epic = 13, Legendary = 2.0 },
+		EpicEgg = { Common = 0, Uncommon = 15, Rare = 35, Epic = 42, Legendary = 8.0 },
+		LegendaryEgg = { Common = 0, Uncommon = 0, Rare = 25, Epic = 50, Legendary = 25.0 },
+	}
+
+	local totalSimRolls = 100000
+	for eggId, expectedTable in eggExpectedRarities do
+		local simReport = EggService.SimulateHatches(eggId, 1.0, totalSimRolls, 10080)
+		local maxDiff = 0
+		local parts: { string } = {}
+		for _, rarityName in RarityConfig.Order do
+			local actualPct = simReport.RarityPercentages[rarityName] or 0
+			local expPct = expectedTable[rarityName] or 0
+			local diff = math.abs(actualPct - expPct)
+			if diff > maxDiff then
+				maxDiff = diff
+			end
+			table.insert(parts, string.format("%s=%.2f%%(exp %.1f%%)", rarityName, actualPct, expPct))
+		end
+
+		verify(
+			maxDiff <= 1.0,
+			string.format("100k hatches [%s] matches PRD 7.1 table within ±1%% (maxDiff=%.2f%% | %s)", eggId, maxDiff, table.concat(parts, ", ")),
+			string.format("maxDiff=%.2f%%", maxDiff)
+		)
+	end
+
+	-- 2. 100,000 variant simulation (Normal 94%, Golden 5%, Shiny 1% — TANPA Luck per PRD)
+	local variantSim = EggService.SimulateHatches("CommonEgg", 1.0, totalSimRolls, 20088)
+	local normalPct = variantSim.VariantPercentages.Normal or 0
+	local goldenPct = variantSim.VariantPercentages.Golden or 0
+	local shinyPct = variantSim.VariantPercentages.Shiny or 0
+	local normalDiff = math.abs(normalPct - 94.0)
+	local goldenDiff = math.abs(goldenPct - 5.0)
+	local shinyDiff = math.abs(shinyPct - 1.0)
+	verify(
+		normalDiff <= 0.6 and goldenDiff <= 0.4 and shinyDiff <= 0.3,
+		string.format("100k variant rolls match Normal 94%% (actual %.2f%%), Golden 5%% (actual %.2f%%), Shiny 1%% (actual %.2f%%)", normalPct, goldenPct, shinyPct),
+		string.format("normDiff=%.2f, goldDiff=%.2f, shinyDiff=%.2f", normalDiff, goldenDiff, shinyDiff)
+	)
+
+	-- 3. Base plot assignment & upgrade profile logic
+	local testUserId = -900080
+	local sessionA = "Step8_SessionA"
+	local sessionB = "Step8_SessionB"
+
+	local okLoad, prof, errLoad = DataService.AcquireProfileLock(testUserId, sessionA, true)
+	verify(okLoad and prof ~= nil, "Acquired Step 8 test profile in Session A", tostring(errLoad))
+
+	if prof then
+		local fresh = DataService.CreateDefaultProfile()
+		for k, v in fresh :: any do
+			(prof :: any)[k] = v
+		end
+
+		-- Verify initial BaseLevel 1 configuration
+		verify(
+			prof.BaseLevel == 1 and EggService.GetMaxIncubatorSlots(prof.BaseLevel) == 1,
+			"Profile starts at BaseLevel 1 with exactly 1 incubator slot"
+		)
+
+		-- UpgradeBase with insufficient coins rejected without negative coins
+		prof.Coins = 100 -- cost to Lv.2 is 800
+		local failUpgrade = BaseService.UpgradeBaseInProfile(prof)
+		verify(
+			not failUpgrade.Success
+				and failUpgrade.Reason == "InsufficientCoins"
+				and prof.BaseLevel == 1
+				and prof.Coins == 100
+				and prof.Coins >= 0,
+			"UpgradeBase rejects when Coins (100) < Cost (800) and never makes Coins negative"
+		)
+
+		-- UpgradeBase Lv.1 -> Lv.2 with 1500 Coins succeeds (cost 800 -> 700 remaining)
+		prof.Coins = 1500
+		local okUpgrade = BaseService.UpgradeBaseInProfile(prof)
+		verify(
+			okUpgrade.Success
+				and okUpgrade.NewBaseLevel == 2
+				and okUpgrade.IncubatorSlots == 2
+				and okUpgrade.PetSlots == 4
+				and okUpgrade.CostPaid == 800
+				and prof.Coins == 700,
+			"UpgradeBase upgrades Lv.1 -> Lv.2 (2 IncubatorSlots, 4 PetSlots) for 800 Coins (700 remaining)"
+		)
+
+		-- 4. Place egg in incubator
+		local commonEgg: Types.EggBagEntry = { Id = "CommonEgg", Rarity = "Common" }
+		local uncommonEgg: Types.EggBagEntry = { Id = "UncommonEgg", Rarity = "Uncommon" }
+		table.insert(prof.EggBag, commonEgg) -- index 1
+		table.insert(prof.EggBag, uncommonEgg) -- index 2
+
+		-- Slot 3 is invalid at BaseLevel 2 (max slots = 2)
+		local placeInvalid = EggService.PlaceEggInIncubatorInProfile(prof, 1, 3)
+		verify(
+			not placeInvalid.Success and placeInvalid.Reason == "InvalidSlot",
+			"Placing egg into slot 3 at BaseLevel 2 rejected with InvalidSlot"
+		)
+
+		local t0 = 5000000
+		local placeSlot1 = EggService.PlaceEggInIncubatorInProfile(prof, 1, 1, t0)
+		verify(
+			placeSlot1.Success
+				and placeSlot1.EggId == "CommonEgg"
+				and placeSlot1.ReadyAt == t0 + 60
+				and prof.Incubators[1] ~= nil
+				and prof.Incubators[1].ReadyAt == t0 + 60
+				and #prof.EggBag == 1,
+			"Placing CommonEgg into incubator slot 1 sets ReadyAt = t0 + 60s and removes egg from EggBag"
+		)
+
+		-- Attempting to place another egg into slot 1 rejected with SlotOccupied
+		local placeOccupied = EggService.PlaceEggInIncubatorInProfile(prof, 1, 1, t0)
+		verify(
+			not placeOccupied.Success and placeOccupied.Reason == "SlotOccupied",
+			"Placing another egg into occupied slot 1 rejected with SlotOccupied"
+		)
+
+		-- 5. Speed-up cost math per PRD: math.ceil(remainingSec / 60) * rate
+		-- CommonEgg: 60s total, rate = 25 C/min
+		-- At t = t0 + 10 (50s remaining -> 1 min -> cost = 25)
+		local cost50s = EggService.ComputeSpeedUpCost(prof.Incubators[1], t0 + 10)
+		verify(cost50s == 25, "Speed-up cost with 50s remaining on CommonEgg is exactly 25 Coins")
+
+		-- SpeedUp with insufficient coins rejected
+		local coinsBeforeSpeedUp = prof.Coins -- 700
+		prof.Coins = 10
+		local failSpeedUp = EggService.SpeedUpIncubatorInProfile(prof, 1, t0 + 10)
+		verify(
+			not failSpeedUp.Success and failSpeedUp.Reason == "InsufficientCoins" and prof.Coins == 10,
+			"SpeedUp rejects when Coins (10) < Cost (25) and never makes Coins negative"
+		)
+
+		-- SpeedUp with enough coins succeeds and immediately sets ReadyAt = now
+		prof.Coins = coinsBeforeSpeedUp
+		local okSpeedUp = EggService.SpeedUpIncubatorInProfile(prof, 1, t0 + 10)
+		verify(
+			okSpeedUp.Success
+				and okSpeedUp.CostPaid == 25
+				and okSpeedUp.CoinsRemaining == 675
+				and prof.Incubators[1].ReadyAt == t0 + 10,
+			"SpeedUp pays 25 Coins (675 remaining) and sets incubator ReadyAt = now"
+		)
+
+		-- 6. Offline incubation persistence:
+		-- Place UncommonEgg (180s) in slot 2 at t0 = 5000000 -> ReadyAt = 5000180
+		local placeSlot2 = EggService.PlaceEggInIncubatorInProfile(prof, 1, 2, t0)
+		verify(placeSlot2.Success and placeSlot2.ReadyAt == t0 + 180, "Placed UncommonEgg into slot 2 (ReadyAt = t0 + 180s)")
+
+		-- Save in Session A, rejoin in Session B at t = t0 + 200s (player was offline while incubation finished)
+		local okSave = DataService.SaveProfileSession(testUserId, sessionA, prof, true)
+		local okRejoin, profRejoin = DataService.AcquireProfileLock(testUserId, sessionB, true)
+		local tRejoin = t0 + 200
+		verify(
+			okSave
+				and okRejoin
+				and profRejoin ~= nil
+				and profRejoin.Incubators[2] ~= nil
+				and profRejoin.Incubators[2].ReadyAt == t0 + 180
+				and tRejoin >= profRejoin.Incubators[2].ReadyAt,
+			"Offline incubation persists across rejoin: egg ReadyAt is preserved and egg is ready to hatch"
+		)
+
+		if profRejoin then
+			-- 7. Hatching checks:
+			-- 7a. Pet Bag full limit (max 60)
+			for i = 1, PetsConfig.MaxPetBagCapacity do
+				profRejoin.Pets["Pet_Test_" .. i] = {
+					Species = "Dog",
+					Variant = "Normal",
+					Level = 1,
+				}
+			end
+			local failHatchFull = EggService.HatchIncubatorInProfile(profRejoin, 2, tRejoin)
+			verify(
+				not failHatchFull.Success and failHatchFull.Reason == "PetBagFull",
+				"Hatching when Pet Bag is full (60/60) rejected with PetBagFull"
+			)
+
+			-- Remove 1 pet (59/60) and hatch slot 2
+			profRejoin.Pets["Pet_Test_60"] = nil
+			local okHatch = EggService.HatchIncubatorInProfile(profRejoin, 2, tRejoin, 1.0, Random.new(999))
+			verify(
+				okHatch.Success
+					and type(okHatch.PetGuid) == "string"
+					and type(okHatch.Species) == "string"
+					and type(okHatch.Variant) == "string"
+					and profRejoin.Pets[okHatch.PetGuid :: string] ~= nil
+					and profRejoin.Index.Pets[okHatch.Species :: string] == true
+					and profRejoin.Incubators[2] == nil,
+				"Hatching ready slot 2 creates PetInstance in Pets, registers species in Index, and clears incubator slot"
+			)
+
+			-- 8. Egg selling from EggBag
+			local rareEgg: Types.EggBagEntry = { Id = "RareEgg", Rarity = "Rare" }
+			table.insert(profRejoin.EggBag, rareEgg)
+			local coinsBeforeSell = profRejoin.Coins
+			local okSellEgg = EggService.SellEggInProfile(profRejoin, #profRejoin.EggBag)
+			verify(
+				okSellEgg.Success
+					and okSellEgg.CoinsEarned == EggsConfig.All.RareEgg.SellPrice
+					and profRejoin.Coins == coinsBeforeSell + EggsConfig.All.RareEgg.SellPrice
+					and #profRejoin.EggBag == 0,
+				"Selling RareEgg from EggBag awards exact Config SellPrice (+280 Coins) and removes egg"
+			)
+
+			-- Clean up test profile
+			DataService.SaveProfileSession(testUserId, sessionB, DataService.CreateDefaultProfile(), true)
+		end
+	end
+
+	print(string.format("[Step8Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -983,4 +1223,5 @@ task.spawn(function()
 	runShovelInventoryVerification()
 	runStep6Verification()
 	runStep7Verification()
+	runStep8Verification()
 end)

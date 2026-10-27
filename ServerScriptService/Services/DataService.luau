@@ -347,8 +347,6 @@ function DataService.Start()
 	end
 	started = true
 
-	initDataStore()
-
 	Players.PlayerAdded:Connect(function(player: Player)
 		DataService.LoadPlayer(player)
 	end)
@@ -358,6 +356,8 @@ function DataService.Start()
 			DataService.ReleasePlayer(player)
 		end
 	end)
+
+	initDataStore()
 
 	for _, player in Players:GetPlayers() do
 		task.spawn(function()
