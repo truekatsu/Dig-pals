@@ -204,9 +204,10 @@ function DropService.ProcessClearedMound(
 	player: Player?,
 	userId: number,
 	mound: MoundService.MoundInstance,
-	rngOverride: Random?
+	rngOverride: Random?,
+	profileOverride: Types.PlayerProfile?
 ): MoundDropSummary
-	local profile = if player then PlayerState.Get(player) else nil
+	local profile = profileOverride or (if player then PlayerState.Get(player) else nil)
 	local equippedShovelId = if profile and profile.Shovels and profile.Shovels.Equipped
 		then profile.Shovels.Equipped
 		else EconomyConfig.StartingShovel

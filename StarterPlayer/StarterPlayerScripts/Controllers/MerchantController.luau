@@ -438,6 +438,7 @@ function MerchantController.OpenPanel(anchorPart: BasePart?, customTitle: string
 	end
 
 	isOpen = true
+	LocalPlayer:SetAttribute("ActiveShopModal", "Merchant")
 	activeAnchorPart = anchorPart
 	merchantTitle = customTitle or "ITEM MERCHANT"
 	setStatusBanner(nil, false)
@@ -457,6 +458,9 @@ function MerchantController.ClosePanel()
 		return
 	end
 	isOpen = false
+	if LocalPlayer:GetAttribute("ActiveShopModal") == "Merchant" then
+		LocalPlayer:SetAttribute("ActiveShopModal", "")
+	end
 	activeAnchorPart = nil
 	setStatusBanner(nil, false)
 
@@ -1097,8 +1101,8 @@ function MerchantController.Start()
 		if not isOpen then
 			return
 		end
-		-- Mutual exclusion if player opened ShovelInventoryPanel via key 2 or Slot 2
-		if InventoryController.IsOpen() then
+		-- Mutual exclusion if player opened ShovelInventoryPanel or ShovelShopPanel
+		if InventoryController.IsOpen() or LocalPlayer:GetAttribute("ActiveShopModal") == "ShovelShop" then
 			MerchantController.ClosePanel()
 			return
 		end

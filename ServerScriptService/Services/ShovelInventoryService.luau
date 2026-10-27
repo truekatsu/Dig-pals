@@ -350,6 +350,7 @@ function ShovelInventoryService.EquipShovel(player: Player, shovelId: string): E
 		toolDesiredActiveByUserId[player.UserId] = true
 		ShovelInventoryService.SyncCharacterTool(player)
 		ShovelInventoryService.SendStateSync(player)
+		DataService.SavePlayer(player)
 	end
 
 	return result

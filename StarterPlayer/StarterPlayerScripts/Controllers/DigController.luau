@@ -18,6 +18,7 @@ local MoundVisuals = require(script.Parent:WaitForChild("MoundVisuals"))
 local InventoryController = require(script.Parent:WaitForChild("InventoryController"))
 local HudController = require(script.Parent:WaitForChild("HudController"))
 local MerchantController = require(script.Parent:WaitForChild("MerchantController"))
+local ShovelShopController = require(script.Parent:WaitForChild("ShovelShopController"))
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -48,7 +49,7 @@ local feedbackLabel: TextLabel? = nil
 local hintToastLabel: TextLabel? = nil
 
 local function isAnyModalOpen(): boolean
-	return InventoryController.IsOpen() or MerchantController.IsOpen()
+	return InventoryController.IsOpen() or MerchantController.IsOpen() or ShovelShopController.IsOpen()
 end
 
 local function getEquippedShovelCooldown(): number

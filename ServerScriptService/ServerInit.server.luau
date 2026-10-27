@@ -1,5 +1,5 @@
 --!strict
--- Main server bootstrapper for Dig Pals (Steps 1-5: DataService, PlayerState, Remotes, MoundService, DigService, DropService)
+-- Main server bootstrapper for Dig Pals (Steps 1-7: DataService, PlayerState, Remotes, MoundService, DigService, DropService, InventoryService, ShovelInventoryService, ShopService)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -8,6 +8,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Economy = require(Shared:WaitForChild("Config"):WaitForChild("Economy"))
 local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"))
 local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rarity"))
+local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local Weighted = require(Shared:WaitForChild("Util"):WaitForChild("Weighted"))
 
@@ -17,6 +18,7 @@ local PlayerState = require(ServicesFolder:WaitForChild("PlayerState"))
 local InventoryService = require(ServicesFolder:WaitForChild("InventoryService"))
 local MoundService = require(ServicesFolder:WaitForChild("MoundService"))
 local ShovelInventoryService = require(ServicesFolder:WaitForChild("ShovelInventoryService"))
+local ShopService = require(ServicesFolder:WaitForChild("ShopService"))
 local DigService = require(ServicesFolder:WaitForChild("DigService"))
 local DropService = require(ServicesFolder:WaitForChild("DropService"))
 
@@ -25,6 +27,7 @@ DataService.Start()
 PlayerState.Start()
 InventoryService.Start()
 ShovelInventoryService.Start()
+ShopService.Start()
 MoundService.Start()
 DigService.Start()
 DropService.Start()
@@ -739,6 +742,238 @@ local function runStep6Verification()
 	print(string.format("[Step6Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+-- Step 7 automated verification (Shop catalog, non-sequential BuyShovel [U], NotForSale/InsufficientCoins/AlreadyOwned checks, live Power/DigSpeed/EffectiveLuck changes on switch, and rejoin persistence)
+local function runStep7Verification()
+	local passed = 0
+	local failed = 0
+
+	local function verify(cond: boolean, label: string, detail: string?)
+		if cond then
+			passed += 1
+			print(string.format("[Step7Validator] PASS: %s", label))
+		else
+			failed += 1
+			warn(string.format("[Step7Validator] FAIL: %s (%s)", label, detail or "assertion failed"))
+		end
+	end
+
+	-- 1. Shop catalog (5 shop shovels) + 2 special non-shop shovels + Hub ShovelShop ProximityPrompt
+	local catalog = ShopService.GetShopCatalog()
+	local expectedPrices = { 0, 400, 2500, 12000, 50000 }
+	local catalogMatches = (#catalog == 5)
+	for idx, shopId in ShovelsConfig.ShopOrder do
+		local entry = catalog[idx]
+		if not entry or entry.Id ~= shopId or entry.Price ~= expectedPrices[idx] or not entry.IsShopShovel then
+			catalogMatches = false
+		end
+	end
+	local mossyCfg = ShovelsConfig.All.MossyShovel
+	local moonlitCfg = ShovelsConfig.All.MoonlitShovel
+	local specialsValid = mossyCfg ~= nil
+		and not mossyCfg.IsShopShovel
+		and mossyCfg.Power == 75
+		and math.abs(mossyCfg.DigSpeed - 0.65) < 1e-6
+		and math.abs(mossyCfg.Luck - 2.0) < 1e-6
+		and moonlitCfg ~= nil
+		and not moonlitCfg.IsShopShovel
+		and moonlitCfg.Power == 140
+		and math.abs(moonlitCfg.DigSpeed - 0.55) < 1e-6
+		and math.abs(moonlitCfg.Luck - 2.5) < 1e-6
+	verify(
+		catalogMatches and specialsValid and ShopService.GetShopAnchorCount() >= 1,
+		"ShopService lists 5 shop shovels (0/400/2500/12000/50000), excludes Mossy & Moonlit specials, and anchors Hub ShovelShop prompt",
+		string.format("catalog=%d, anchors=%d", #catalog, ShopService.GetShopAnchorCount())
+	)
+
+	local testUserId = -900070
+	local sessionA = "Step7_SessionA"
+	local sessionB = "Step7_SessionB"
+
+	local okLoad, prof, errLoad = DataService.AcquireProfileLock(testUserId, sessionA, true)
+	verify(okLoad and prof ~= nil, "Acquired Step 7 test profile in Session A", tostring(errLoad))
+
+	if prof then
+		local fresh = DataService.CreateDefaultProfile()
+		for k, v in fresh :: any do
+			(prof :: any)[k] = v
+		end
+
+		-- 2. Special shovels (MossyShovel, MoonlitShovel) rejected from ShopService.BuyShovelInProfile
+		local buyMossy = ShopService.BuyShovelInProfile(prof, "MossyShovel", true)
+		local buyMoonlit = ShopService.BuyShovelInProfile(prof, "MoonlitShovel", true)
+		verify(
+			not buyMossy.Success
+				and buyMossy.Reason == "NotForSale"
+				and not buyMoonlit.Success
+				and buyMoonlit.Reason == "NotForSale"
+				and #prof.Shovels.Owned == 1,
+			"MossyShovel and MoonlitShovel cannot be purchased in ShopService (NotForSale)"
+		)
+
+		-- 3. Insufficient Coins rejected without negative Coins (100 < 400 for StoneShovel)
+		local buyBroke = ShopService.BuyShovelInProfile(prof, "StoneShovel", true)
+		verify(
+			not buyBroke.Success
+				and buyBroke.Reason == "InsufficientCoins"
+				and prof.Coins == 100
+				and prof.Coins >= 0
+				and table.find(prof.Shovels.Owned, "StoneShovel") == nil,
+			"BuyShovel rejects when Coins (100) < Price (400) and never makes Coins negative"
+		)
+
+		-- 4. Non-sequential purchase [U]: buy GoldenShovel (12,000) directly without owning StoneShovel or IronShovel
+		prof.Coins = 13000
+		local buyGolden = ShopService.BuyShovelInProfile(prof, "GoldenShovel", true)
+		local buyGoldenAgain = ShopService.BuyShovelInProfile(prof, "GoldenShovel", true)
+		verify(
+			buyGolden.Success
+				and buyGolden.PricePaid == 12000
+				and prof.Coins == 1000
+				and prof.Shovels.Equipped == "GoldenShovel"
+				and table.find(prof.Shovels.Owned, "GoldenShovel") ~= nil
+				and table.find(prof.Shovels.Owned, "StoneShovel") == nil
+				and table.find(prof.Shovels.Owned, "IronShovel") == nil
+				and not buyGoldenAgain.Success
+				and buyGoldenAgain.Reason == "AlreadyOwned"
+				and prof.Coins == 1000,
+			"Out-of-order purchase [U] of GoldenShovel (12,000) succeeds without Stone/Iron and rejects duplicate purchase"
+		)
+
+		-- 5. Buy StoneShovel (400) -> 600 Coins remaining
+		local buyStone = ShopService.BuyShovelInProfile(prof, "StoneShovel", false)
+		verify(
+			buyStone.Success
+				and buyStone.PricePaid == 400
+				and prof.Coins == 600
+				and table.find(prof.Shovels.Owned, "StoneShovel") ~= nil
+				and prof.Shovels.Equipped == "GoldenShovel",
+			"Purchased StoneShovel (400 Coins -> 600 remaining) while keeping GoldenShovel equipped when autoEquip=false"
+		)
+
+		-- 6. Switching shovels immediately updates Power (damage), DigSpeed (cooldown), and Luck (EffectiveLuck)
+		MoundService.ClearUserMounds(testUserId)
+		DigService.CancelSession(testUserId)
+
+		local mound = MoundService.SpawnMoundForUser(testUserId, nil, Vector3.new(0, 5, 0), 7000000)
+		if mound then
+			mound.Size = "Small" -- Speed = 0.8
+			mound.HP = 500
+			mound.MaxHP = 500
+
+			local speed = MoundsConfig.Sizes.Small.Timing.Speed -- 0.8
+			local nearPos = mound.Position + Vector3.new(2, 0, 0)
+			local t0 = 12000.0
+			DigService.StartSession(testUserId, nil, mound.Id, t0, nearPos)
+
+			-- Create a synthetic cleared-mound template with 1/1 Perfect strike (TimingScore = 1.0 -> x1.25 Luck)
+			local luckProbeMound: MoundService.MoundInstance = {
+				Id = "Step7_LuckProbe",
+				OwnerUserId = testUserId,
+				Size = "Small",
+				Position = mound.Position,
+				HP = 0,
+				MaxHP = 50,
+				SpawnedAt = t0,
+				LastInteractedAt = t0,
+				PerfectCount = 1,
+				GoodCount = 0,
+				MissCount = 0,
+			}
+
+			-- 6a. Equip RustyShovel (Power=10, DigSpeed=1.0s, Luck=1.0)
+			ShovelInventoryService.EquipShovelInProfile(prof, "RustyShovel")
+			local tRusty = t0 + (0.5 / speed) -- pos = 0.5 (Perfect)
+			local hitRusty = DigService.ExecuteStrike(testUserId, nil, mound.Id, tRusty, nearPos, 0, prof)
+			local cdRusty = DigService.ExecuteStrike(testUserId, nil, mound.Id, tRusty + 0.75, nearPos, 0, prof)
+			local dropRusty = DropService.ProcessClearedMound(nil, testUserId, luckProbeMound, Random.new(701), prof)
+
+			-- 6b. Switch to StoneShovel (Power=18, DigSpeed=0.9s, Luck=1.2)
+			ShovelInventoryService.EquipShovelInProfile(prof, "StoneShovel")
+			local tStone = t0 + (2.5 / speed) -- 2.5s after tRusty, pos = 0.5 (Perfect)
+			local hitStone = DigService.ExecuteStrike(testUserId, nil, mound.Id, tStone, nearPos, 0, prof)
+			local cdStone = DigService.ExecuteStrike(testUserId, nil, mound.Id, tStone + 0.75, nearPos, 0, prof)
+			local dropStone = DropService.ProcessClearedMound(nil, testUserId, luckProbeMound, Random.new(702), prof)
+
+			-- 6c. Switch to GoldenShovel (Power=60, DigSpeed=0.7s, Luck=1.85)
+			ShovelInventoryService.EquipShovelInProfile(prof, "GoldenShovel")
+			local tGolden = t0 + (4.5 / speed) -- 2.5s after tStone, pos = 0.5 (Perfect)
+			local hitGolden = DigService.ExecuteStrike(testUserId, nil, mound.Id, tGolden, nearPos, 0, prof)
+			-- 0.75s after tGolden MUST SUCCEED because GoldenShovel DigSpeed is 0.70s!
+			local fastFollowGolden = DigService.ExecuteStrike(testUserId, nil, mound.Id, tGolden + 0.75, nearPos, 0, prof)
+			-- 0.50s after fastFollowGolden MUST REJECT because 0.50s < 0.70s!
+			local cdGolden = DigService.ExecuteStrike(testUserId, nil, mound.Id, tGolden + 0.75 + 0.50, nearPos, 0, prof)
+			local dropGolden = DropService.ProcessClearedMound(nil, testUserId, luckProbeMound, Random.new(703), prof)
+
+			verify(
+				hitRusty.Success
+					and hitRusty.Damage == 20
+					and hitStone.Success
+					and hitStone.Damage == 36
+					and hitGolden.Success
+					and hitGolden.Damage == 120,
+				"Switching shovel immediately changes Perfect strike damage (Rusty=20 -> Stone=36 -> Golden=120)",
+				string.format(
+					"rusty=%s, stone=%s, golden=%s",
+					tostring(hitRusty.Damage),
+					tostring(hitStone.Damage),
+					tostring(hitGolden.Damage)
+				)
+			)
+
+			verify(
+				not cdRusty.Success
+					and cdRusty.Reason == "Cooldown"
+					and not cdStone.Success
+					and cdStone.Reason == "Cooldown"
+					and fastFollowGolden.Success
+					and not cdGolden.Success
+					and cdGolden.Reason == "Cooldown",
+				"Switching shovel immediately changes DigSpeed cooldown (0.75s blocked on Rusty 1.0s & Stone 0.9s, allowed on Golden 0.7s)"
+			)
+
+			verify(
+				math.abs(dropRusty.EffectiveLuck - 1.25) < 1e-6
+					and math.abs(dropStone.EffectiveLuck - 1.50) < 1e-6
+					and math.abs(dropGolden.EffectiveLuck - 2.3125) < 1e-6,
+				"Switching shovel immediately changes EffectiveLuck at Score=1.0 (Rusty=1.25 -> Stone=1.50 -> Golden=2.3125)",
+				string.format(
+					"rusty=%.4f, stone=%.4f, golden=%.4f",
+					dropRusty.EffectiveLuck,
+					dropStone.EffectiveLuck,
+					dropGolden.EffectiveLuck
+				)
+			)
+		else
+			verify(false, "Spawned test mound for Step 7 shovel stat switching")
+		end
+
+		MoundService.ClearUserMounds(testUserId)
+		DigService.CancelSession(testUserId)
+
+		-- 7. Persistence across rejoin
+		local okSave = DataService.SaveProfileSession(testUserId, sessionA, prof, true)
+		local okRejoin, profRejoin = DataService.AcquireProfileLock(testUserId, sessionB, true)
+		verify(
+			okSave
+				and okRejoin
+				and profRejoin ~= nil
+				and profRejoin.Coins == 600
+				and profRejoin.Shovels.Equipped == "GoldenShovel"
+				and #profRejoin.Shovels.Owned == 3
+				and table.find(profRejoin.Shovels.Owned, "RustyShovel") ~= nil
+				and table.find(profRejoin.Shovels.Owned, "StoneShovel") ~= nil
+				and table.find(profRejoin.Shovels.Owned, "GoldenShovel") ~= nil,
+			"Owned shovels (Rusty, Stone, Golden), Equipped (GoldenShovel), and Coins (600) persist across rejoin"
+		)
+
+		if profRejoin then
+			DataService.SaveProfileSession(testUserId, sessionB, DataService.CreateDefaultProfile(), true)
+		end
+	end
+
+	print(string.format("[Step7Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -747,4 +982,5 @@ task.spawn(function()
 	runStep5Verification()
 	runShovelInventoryVerification()
 	runStep6Verification()
+	runStep7Verification()
 end)

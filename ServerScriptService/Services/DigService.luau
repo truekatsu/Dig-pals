@@ -64,14 +64,12 @@ local function isWithinDigRange(playerPos: Vector3, moundPos: Vector3): boolean
 	return horizontalDist <= MoundsConfig.DigRangeStuds
 end
 
-local function getEquippedShovelConfig(player: Player?): Types.ShovelConfig
-	if player then
-		local profile = PlayerState.Get(player)
-		if profile and profile.Shovels and profile.Shovels.Equipped then
-			local configured = ShovelsConfig.All[profile.Shovels.Equipped]
-			if configured then
-				return configured
-			end
+local function getEquippedShovelConfig(player: Player?, profileOverride: Types.PlayerProfile?): Types.ShovelConfig
+	local profile = profileOverride or (if player then PlayerState.Get(player) else nil)
+	if profile and profile.Shovels and profile.Shovels.Equipped then
+		local configured = ShovelsConfig.All[profile.Shovels.Equipped]
+		if configured then
+			return configured
 		end
 	end
 	return ShovelsConfig.All[EconomyConfig.StartingShovel] or ShovelsConfig.All.RustyShovel
@@ -158,7 +156,8 @@ function DigService.ExecuteStrike(
 	moundId: string,
 	serverNowOverride: number?,
 	playerPosOverride: Vector3?,
-	latencyToleranceOverride: number?
+	latencyToleranceOverride: number?,
+	profileOverride: Types.PlayerProfile?
 ): StrikeOutcome
 	local mound = MoundService.GetMound(userId, moundId)
 	if not mound or mound.HP <= 0 then
@@ -196,7 +195,7 @@ function DigService.ExecuteStrike(
 		session = createdSession
 	end
 
-	local shovel = getEquippedShovelConfig(player)
+	local shovel = getEquippedShovelConfig(player, profileOverride)
 	if session.LastStrikeTime > 0 and (serverNow - session.LastStrikeTime) < shovel.DigSpeed then
 		return {
 			Success = false,
