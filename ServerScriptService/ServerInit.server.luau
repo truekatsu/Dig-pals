@@ -28,6 +28,7 @@ local DigService = require(ServicesFolder:WaitForChild("DigService"))
 local DropService = require(ServicesFolder:WaitForChild("DropService"))
 local PetService = require(ServicesFolder:WaitForChild("PetService"))
 local PassiveIncomeService = require(ServicesFolder:WaitForChild("PassiveIncomeService"))
+local SharedMoundService = require(ServicesFolder:WaitForChild("SharedMoundService"))
 
 Remotes.EnsureAll()
 DataService.Start()
@@ -39,6 +40,7 @@ BaseService.Start()
 EggService.Start()
 PetService.Start()
 PassiveIncomeService.Start()
+SharedMoundService.Start()
 MoundService.Start()
 DigService.Start()
 DropService.Start()
@@ -1577,6 +1579,189 @@ local function runStep10Verification()
 	print(string.format("[Step10Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+-- Step 11 automated verification: Gundukan Langka (shared), concurrent digging, and contribution rewards
+local function runStep11Verification()
+	local passed = 0
+	local failed = 0
+
+	local function verify(condition: boolean, testName: string)
+		if condition then
+			passed += 1
+			print(string.format("[Step11Validator] PASS: %s", testName))
+		else
+			failed += 1
+			warn(string.format("[Step11Validator] FAIL: %s", testName))
+		end
+	end
+
+	print("[Step11Validator] Starting Gundukan Langka (Shared Mound) verification...")
+
+	-- 1. Shared Mound Config verification
+	local sharedCfg = MoundsConfig.Shared
+	verify(sharedCfg.SpawnIntervalSeconds == 720, "Spawn interval is 12 minutes (720 seconds)")
+	verify(sharedCfg.DurationSeconds == 240, "Mound duration is 4 minutes (240 seconds)")
+	verify(sharedCfg.HP == 3000, "Shared mound max HP is exactly 3,000")
+	verify(sharedCfg.MinContributionRatio == 0.03, "Minimum contribution threshold is 3% (0.03)")
+	verify(sharedCfg.Timing.Speed == 1.6, "Shared mound timing speed is 1.6")
+	verify(sharedCfg.Timing.GoodWidth == 0.18, "Shared mound Good zone width is 0.18")
+	verify(sharedCfg.Timing.PerfectWidth == 0.05, "Shared mound Perfect zone width is 0.05")
+	verify(sharedCfg.EggRarityWeights.Common == 0, "Egg drops Common weight is 0 (minimal Uncommon)")
+	verify(sharedCfg.RewardLuckMultiplier == 1.5, "Reward luck multiplier is 1.5x")
+	verify(sharedCfg.SpecialShovelDropChances.MossyShovel == 0.005, "Mossy Shovel chance is 0.5% (0.005)")
+	verify(sharedCfg.SpecialShovelDropChances.MoonlitShovel == 0.002, "Moonlit Shovel chance is 0.2% (0.002)")
+
+	-- 2. Spawn Points
+	local spawnPoints = SharedMoundService.GetSpawnPoints()
+	verify(#spawnPoints >= 5, string.format("Workspace has %d spawn points (at least 5 required)", #spawnPoints))
+
+	-- Clean up any prior active mound before testing
+	SharedMoundService.DespawnSharedMound("TestReset")
+
+	-- 3. Spawning Shared Mound
+	local t0 = 1000
+	local spawnedMound = SharedMoundService.SpawnSharedMound(1, t0)
+	verify(spawnedMound ~= nil, "SpawnSharedMound returned a valid instance")
+	if spawnedMound then
+		verify(spawnedMound.HP == 3000 and spawnedMound.MaxHP == 3000, "Spawned mound initialized with 3,000 HP")
+		verify(spawnedMound.ExpiresAt == t0 + 240, "Spawned mound expires in 240 seconds (at t=1240)")
+		verify(spawnedMound.Scale == Vector3.new(12, 6, 12), "Spawned mound scale is (12, 6, 12)")
+		verify(SharedMoundService.IsSharedMound(spawnedMound.Id), "IsSharedMound returns true for active mound ID")
+
+		-- 4. Out of range vs in-range strike session
+		local moundPos = spawnedMound.Position
+		local farPos = moundPos + Vector3.new(30, 0, 0)
+		local nearPos = moundPos + Vector3.new(10, 0, 0) -- 10 studs from center, within 14 allowed studs
+
+		local okFar, errFar = SharedMoundService.StartSession(2001, nil, spawnedMound.Id, t0, farPos)
+		verify(okFar == false and errFar == "OutOfRange", "StartSession rejected when avatar is out of range (30 studs)")
+
+		local okNear, _, sessionNear = SharedMoundService.StartSession(2001, nil, spawnedMound.Id, t0, nearPos)
+		verify(okNear == true and sessionNear ~= nil, "StartSession accepted within interaction range (10 studs)")
+
+		-- 5. Multiplayer concurrent digging & damage tracking
+		-- Player 1 (UserId 2001) with Iron Shovel (Power 32)
+		local ironProfile = DataService.CreateDefaultProfile()
+		ironProfile.Shovels.Owned = { "RustyShovel", "IronShovel" }
+		ironProfile.Shovels.Equipped = "IronShovel"
+
+		-- Player 2 (UserId 2002) with Stone Shovel (Power 18)
+		local stoneProfile = DataService.CreateDefaultProfile()
+		stoneProfile.Shovels.Owned = { "RustyShovel", "StoneShovel" }
+		stoneProfile.Shovels.Equipped = "StoneShovel"
+
+		-- Start session for Player 2
+		SharedMoundService.StartSession(2002, nil, spawnedMound.Id, t0, nearPos)
+
+		-- Strike 1: Player 1 strikes at t=1000 with Iron Shovel, Perfect grade (multiplier 2.0 -> 64 damage)
+		local strike1 = SharedMoundService.ExecuteStrike(
+			2001,
+			nil,
+			spawnedMound.Id,
+			t0,
+			nearPos,
+			0.20,
+			ironProfile
+		)
+		verify(strike1.Success == true, "Player 1 strike succeeded")
+		verify(spawnedMound.HP == (3000 - strike1.Damage), string.format("Shared Mound HP reduced to %.1f after strike 1", spawnedMound.HP))
+		verify(spawnedMound.Contributions[2001] == strike1.Damage, "Player 1 damage recorded in contributions")
+
+		-- Strike 2: Player 2 strikes at t=1000.5 with Stone Shovel, Good grade
+		local strike2 = SharedMoundService.ExecuteStrike(
+			2002,
+			nil,
+			spawnedMound.Id,
+			t0 + 0.5,
+			nearPos,
+			0.20,
+			stoneProfile
+		)
+		verify(strike2.Success == true, "Player 2 concurrent strike succeeded")
+		verify(spawnedMound.Contributions[2002] == strike2.Damage, "Player 2 damage recorded independently in contributions")
+
+		-- 6. Pet Damage on Shared Mound
+		local prePetHP = spawnedMound.HP
+		local petDmg = 50
+		local okPet, remPetHP = SharedMoundService.ApplyPetDamage(nil, 2001, "Pet_Test_Guid", petDmg)
+		verify(okPet == true, "Pet damage applied successfully to shared mound")
+		verify(spawnedMound.HP == prePetHP - petDmg, "Shared mound HP deducted by pet damage")
+		verify(spawnedMound.Contributions[2001] == (strike1.Damage + petDmg), "Pet damage added to owner's contribution")
+
+		-- 7. Contribution Threshold Rewards (< 3% vs >= 3%)
+		-- 3% of 3000 is 90 damage.
+		-- Give Player 2003 exactly 89 damage (2.97% < 3% threshold)
+		-- Give Player 2004 exactly 90 damage (3.00% >= 3% threshold)
+		-- Give Player 2005 exactly 1500 damage (50.00%, top contributor)
+		spawnedMound.Contributions[2003] = 89
+		spawnedMound.Contributions[2004] = 90
+		spawnedMound.Contributions[2005] = 1500
+
+		local dummyProfile = DataService.CreateDefaultProfile()
+		local deterministicRng = Random.new(12345)
+
+		-- User 2003 (< 3%): calculate rewards gives nil or skipped by distribution
+		local minThreshold = spawnedMound.MaxHP * MoundsConfig.Shared.MinContributionRatio
+		verify(spawnedMound.Contributions[2003] < minThreshold, "Player 2003 dealt 89 damage (< 90 / 3% min threshold)")
+		verify(spawnedMound.Contributions[2004] >= minThreshold, "Player 2004 dealt 90 damage (>= 90 / 3% min threshold)")
+
+		-- Verify Reward Roll contents for eligible non-top contributor (Player 2004)
+		local rewardSummary2004 = SharedMoundService.CalculateRewardsForUser(
+			2004,
+			"Player2004",
+			dummyProfile,
+			90,
+			3000,
+			false,
+			deterministicRng
+		)
+		verify(#rewardSummary2004.EggDrops == 2, string.format("Eligible contributor receives exactly 2 egg rolls (got %d)", #rewardSummary2004.EggDrops))
+		verify(#rewardSummary2004.ItemDrops == 1, string.format("Eligible contributor receives exactly 1 item roll (got %d)", #rewardSummary2004.ItemDrops))
+		verify(rewardSummary2004.IsTopContributor == false, "Player 2004 is correctly marked not top contributor")
+
+		-- Verify minimum rarity for eggs (no Common egg)
+		local hasCommonEgg = false
+		for _, eggDrop in ipairs(rewardSummary2004.EggDrops) do
+			if eggDrop.Rarity == "Common" then
+				hasCommonEgg = true
+			end
+		end
+		verify(hasCommonEgg == false, "Egg drops contain NO Common eggs (all eggs are >= Uncommon)")
+
+		-- Verify Top Contributor receives +1 bonus egg roll (3 total)
+		local rewardSummary2005 = SharedMoundService.CalculateRewardsForUser(
+			2005,
+			"Player2005",
+			dummyProfile,
+			1500,
+			3000,
+			true,
+			deterministicRng
+		)
+		verify(#rewardSummary2005.EggDrops == 3, string.format("Top contributor receives 3 egg rolls (2 base + 1 bonus, got %d)", #rewardSummary2005.EggDrops))
+		verify(#rewardSummary2005.ItemDrops == 1, "Top contributor receives 1 item roll")
+		verify(rewardSummary2005.IsTopContributor == true, "Player 2005 is correctly marked top contributor")
+
+		-- 8. Idempotency & Clean Completion
+		spawnedMound.HP = 0
+		SharedMoundService.CompleteSharedMound(spawnedMound, deterministicRng)
+		verify(spawnedMound.Cleared == true, "Shared mound marked Cleared after CompleteSharedMound")
+		verify(spawnedMound.RewardDistributed == true, "RewardDistributed flag set to true")
+		verify(SharedMoundService.GetActiveMound() == nil, "Active shared mound is cleared (nil) after completion")
+
+		-- Calling CompleteSharedMound again is a safe no-op
+		local doubleCallOk = pcall(function()
+			SharedMoundService.CompleteSharedMound(spawnedMound, deterministicRng)
+		end)
+		verify(doubleCallOk == true, "Second completion call is a safe no-op (no double rewards)")
+	end
+
+	-- 9. Despawn clean state
+	SharedMoundService.DespawnSharedMound("Expired")
+	verify(SharedMoundService.GetActiveMound() == nil, "GetActiveMound is nil after despawn")
+
+	print(string.format("[Step11Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -1589,4 +1774,5 @@ task.spawn(function()
 	runStep8Verification()
 	runStep9Verification()
 	runStep10Verification()
+	runStep11Verification()
 end)

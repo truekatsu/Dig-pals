@@ -86,6 +86,14 @@ local function updateZoneLayout()
 end
 
 local function applyMoundTimingConfig(sizeName: string)
+	if sizeName == "Shared" or sizeName == "Rare" then
+		local timing = MoundsConfig.Shared.Timing
+		barSpeed = timing.Speed
+		goodWidth = timing.GoodWidth
+		perfectWidth = timing.PerfectWidth
+		updateZoneLayout()
+		return
+	end
 	local sizeConfig = (MoundsConfig.Sizes :: any)[sizeName] or MoundsConfig.Sizes.Small
 	barSpeed = sizeConfig.Timing.Speed
 	goodWidth = sizeConfig.Timing.GoodWidth
@@ -212,7 +220,10 @@ function DigController.StopMinigame(notifyServer: boolean)
 	end
 end
 
-local function isCharacterWithinRangeOf(targetPos: Vector3): boolean
+local function isCharacterWithinRangeOf(targetPos: Vector3?, maxDistance: number?): boolean
+	if not targetPos then
+		return false
+	end
 	local character = LocalPlayer.Character
 	if not character then
 		return false
@@ -224,15 +235,21 @@ local function isCharacterWithinRangeOf(targetPos: Vector3): boolean
 	local dx = rootPart.Position.X - targetPos.X
 	local dz = rootPart.Position.Z - targetPos.Z
 	local horizDist = math.sqrt(dx * dx + dz * dz)
-	return horizDist <= MoundsConfig.DigRangeStuds
+	local limit = maxDistance or MoundsConfig.DigRangeStuds
+	return horizDist <= limit
 end
 
 function DigController.StartMinigameOnMound(moundId: string, moundSize: string, moundPos: Vector3)
 	if isAnyModalOpen() then
 		return
 	end
-	if not isCharacterWithinRangeOf(moundPos) then
-		showHintToast("Dekati gundukan dulu (maks 8 studs) lalu klik!")
+	local isShared = (moundSize == "Shared" or moundSize == "Rare" or MoundVisuals.IsSharedMound(moundId))
+	local allowedRange = if isShared
+		then (MoundsConfig.Shared.Scale.X * 0.5) + MoundsConfig.DigRangeStuds
+		else MoundsConfig.DigRangeStuds
+
+	if not isCharacterWithinRangeOf(moundPos, allowedRange) then
+		showHintToast("Dekati gundukan dulu lalu klik!")
 		return
 	end
 
@@ -546,8 +563,11 @@ function DigController.Start()
 			return
 		end
 
-		local moundPos = MoundVisuals.GetMoundPosition(activeMoundId)
-		if not moundPos or not isCharacterWithinRangeOf(moundPos) then
+		local moundPos, moundSize, isShared = MoundVisuals.GetMoundPosition(activeMoundId)
+		local allowedRange = if isShared
+			then (MoundsConfig.Shared.Scale.X * 0.5) + MoundsConfig.DigRangeStuds
+			else MoundsConfig.DigRangeStuds
+		if not moundPos or not isCharacterWithinRangeOf(moundPos, allowedRange) then
 			DigController.StopMinigame(true)
 			return
 		end

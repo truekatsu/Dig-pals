@@ -140,7 +140,7 @@ local function refreshRightSummaryAndHeader()
 		headerCoinsPill.Text = string.format("%s Coin", Format.Commas(coinsBalance))
 	end
 	if headerBagPill then
-		headerBagPill.Text = string.format("Tas %d/%d • Lv.%d", totalCount, bagCap, bagLevel)
+		headerBagPill.Text = string.format("Tas %d/%d | Lv.%d", totalCount, bagCap, bagLevel)
 	end
 
 	if summaryCountLabel then
@@ -203,7 +203,7 @@ local function refreshRightSummaryAndHeader()
 		local canAfford = coinsBalance >= cost
 
 		if upgradeCapLabel then
-			upgradeCapLabel.Text = string.format("Kapasitas: %d Item  →  %d Item", bagCap, nextCap)
+			upgradeCapLabel.Text = string.format("Kapasitas: %d Item  ->  %d Item", bagCap, nextCap)
 		end
 		if upgradeCostLabel then
 			upgradeCostLabel.Text = string.format("Biaya Upgrade: %s Coin", Format.Commas(cost))
@@ -344,7 +344,7 @@ local function rebuildItemRows()
 		subLbl.TextXAlignment = Enum.TextXAlignment.Left
 		subLbl.TextTruncate = Enum.TextTruncate.AtEnd
 		subLbl.TextColor3 = COLORS.TextSecondary
-		subLbl.Text = string.format("%s • %s Coin", cfg.Rarity, Format.Commas(unitPrice))
+		subLbl.Text = string.format("%s | %s Coin", cfg.Rarity, Format.Commas(unitPrice))
 		subLbl.Parent = row
 
 		local sellOneBtn = Instance.new("TextButton")
@@ -676,7 +676,7 @@ local function buildMerchantGui()
 	bagPill.Font = Enum.Font.GothamBold
 	bagPill.TextSize = 12
 	bagPill.TextColor3 = COLORS.TextSecondary
-	bagPill.Text = "Tas 0/20 • Lv.1"
+	bagPill.Text = "Tas 0/20 | Lv.1"
 	bagPill.ZIndex = 12
 	bagPill.Parent = header
 	headerBagPill = bagPill
@@ -957,7 +957,7 @@ local function buildMerchantGui()
 	uCap.TextSize = 13
 	uCap.TextXAlignment = Enum.TextXAlignment.Left
 	uCap.TextColor3 = Color3.fromRGB(116, 214, 255)
-	uCap.Text = "Kapasitas: 20 Item  →  40 Item"
+	uCap.Text = "Kapasitas: 20 Item  ->  40 Item"
 	uCap.Parent = upgCard
 	upgradeCapLabel = uCap
 

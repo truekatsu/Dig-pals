@@ -276,7 +276,7 @@ local function rebuildEggBagList()
 		eggBadge.BorderSizePixel = 0
 		eggBadge.Font = Enum.Font.GothamBlack
 		eggBadge.TextSize = 22
-		eggBadge.Text = "🥚"
+		eggBadge.Text = "[Egg]"
 		eggBadge.Parent = row
 
 		local eggBadgeCorner = Instance.new("UICorner")
@@ -305,7 +305,7 @@ local function rebuildEggBagList()
 		subLbl.TextSize = 11
 		subLbl.TextXAlignment = Enum.TextXAlignment.Left
 		subLbl.TextColor3 = COLORS.TextSecondary
-		subLbl.Text = string.format("%s • Durasi %d mnt", eggRarity, durationMin)
+		subLbl.Text = string.format("%s | Durasi %d mnt", eggRarity, durationMin)
 		subLbl.Parent = row
 
 		-- Place button (only active if incubator slot is currently empty)
@@ -440,11 +440,11 @@ function BaseController.ShowCelebration(
 
 	if celebrationVariantBadge then
 		if variant == "Shiny" then
-			celebrationVariantBadge.Text = "✨ SHINY (+125% STAT)"
+			celebrationVariantBadge.Text = "[*] SHINY (+125% STAT)"
 			celebrationVariantBadge.BackgroundColor3 = Color3.fromRGB(158, 88, 255)
 			celebrationVariantBadge.Visible = true
 		elseif variant == "Golden" then
-			celebrationVariantBadge.Text = "⭐ GOLDEN (+50% STAT)"
+			celebrationVariantBadge.Text = "  GOLDEN (+50% STAT)"
 			celebrationVariantBadge.BackgroundColor3 = Color3.fromRGB(245, 188, 48)
 			celebrationVariantBadge.Visible = true
 		else
@@ -463,7 +463,7 @@ function BaseController.ShowCelebration(
 		local income = math.floor(speciesCfg.BaseIncome * (if varCfg then varCfg.IncomeMultiplier else 1.0))
 
 		celebrationStatsLabel.Text = string.format(
-			"Power %d  •  Speed %d  •  Jeda Gali %d  •  Range %d studs  •  Income +%d C/dtk",
+			"Power %d  |  Speed %d  |  Jeda Gali %d  |  Range %d studs  |  Income +%d C/dtk",
 			power, speed, digSpeed, range, income
 		)
 	end
@@ -863,7 +863,7 @@ local function buildIncubatorGui()
 	bigEggEmoji.BackgroundTransparency = 1
 	bigEggEmoji.Font = Enum.Font.GothamBlack
 	bigEggEmoji.TextSize = 58
-	bigEggEmoji.Text = "🥚"
+	bigEggEmoji.Text = "[Egg]"
 	bigEggEmoji.ZIndex = 13
 	bigEggEmoji.Parent = eggIconBox
 
@@ -1027,7 +1027,7 @@ local function buildIncubatorGui()
 	cPetIcon.BackgroundTransparency = 1
 	cPetIcon.Font = Enum.Font.GothamBlack
 	cPetIcon.TextSize = 56
-	cPetIcon.Text = "🐾"
+	cPetIcon.Text = " "
 	cPetIcon.ZIndex = 27
 	cPetIcon.Parent = celebFrame
 
@@ -1073,7 +1073,7 @@ local function buildIncubatorGui()
 	cVariant.Font = Enum.Font.GothamBlack
 	cVariant.TextSize = 10
 	cVariant.TextColor3 = Color3.fromRGB(255, 255, 255)
-	cVariant.Text = "⭐ GOLDEN (+50%)"
+	cVariant.Text = "  GOLDEN (+50%)"
 	cVariant.ZIndex = 27
 	cVariant.Parent = celebFrame
 	celebrationVariantBadge = cVariant
@@ -1091,7 +1091,7 @@ local function buildIncubatorGui()
 	cStats.TextSize = 12
 	cStats.TextWrapped = true
 	cStats.TextColor3 = COLORS.TextSecondary
-	cStats.Text = "Power 140 • Speed 8 • Jeda Gali 9 • Range 35 • Income +160 C/dtk"
+	cStats.Text = "Power 140 | Speed 8 | Jeda Gali 9 | Range 35 | Income +160 C/dtk"
 	cStats.ZIndex = 27
 	cStats.Parent = celebFrame
 	celebrationStatsLabel = cStats

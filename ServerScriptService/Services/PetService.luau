@@ -16,6 +16,7 @@ local PlayerState = require(script.Parent:WaitForChild("PlayerState"))
 local ShovelInventoryService = require(script.Parent:WaitForChild("ShovelInventoryService"))
 local MoundService = require(script.Parent:WaitForChild("MoundService"))
 local DigService = require(script.Parent:WaitForChild("DigService"))
+local SharedMoundService = require(script.Parent:WaitForChild("SharedMoundService"))
 
 export type EffectivePetStats = {
 	Power: number,
@@ -349,23 +350,39 @@ function PetService.ReleasePetInProfile(
 	}
 end
 
--- Find closest active mound within range of player position
+type MoundTarget = {
+	Id: string,
+	Size: string,
+	Position: Vector3,
+}
+
+-- Find closest active mound (personal or shared) within range of player position
 local function findClosestMoundInRange(
 	userId: number,
 	avatarPos: Vector3,
 	range: number
-): (MoundService.MoundInstance?, number)
+): (MoundTarget?, number)
 	local mounds = MoundService.GetPlayerMounds(userId)
-	local closest: MoundService.MoundInstance? = nil
+	local closest: MoundTarget? = nil
 	local closestDist = range + 0.001
 
 	for _, mound in mounds do
 		if mound.HP > 0 then
 			local dist = (mound.Position - avatarPos).Magnitude
 			if dist <= range and dist < closestDist then
-				closest = mound
+				closest = { Id = mound.Id, Size = mound.Size, Position = mound.Position }
 				closestDist = dist
 			end
+		end
+	end
+
+	local sharedMound = SharedMoundService.GetActiveMound()
+	if sharedMound and sharedMound.IsActive and sharedMound.HP > 0 then
+		local effectiveRange = range + (sharedMound.Scale.X * 0.5)
+		local dist = (sharedMound.Position - avatarPos).Magnitude
+		if dist <= effectiveRange and dist < closestDist then
+			closest = { Id = sharedMound.Id, Size = "Shared", Position = sharedMound.Position }
+			closestDist = dist
 		end
 	end
 

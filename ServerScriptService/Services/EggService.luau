@@ -114,7 +114,7 @@ function EggService.PickSpeciesForRarity(eggId: string, rarity: Types.RarityName
 	return candidates[index]
 end
 
--- Pure helper: Roll variant (Golden 5%, Shiny 1%, Normal 94% — TANPA Luck per PRD)
+-- Pure helper: Roll variant (Golden 5%, Shiny 1%, Normal 94% -- TANPA Luck per PRD)
 function EggService.RollVariant(rng: Random): Types.PetVariantName
 	local roll = rng:NextInteger(1, 100)
 	if roll <= 1 then

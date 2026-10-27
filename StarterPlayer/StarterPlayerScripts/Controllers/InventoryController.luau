@@ -478,7 +478,7 @@ local function rebuildShovelList()
 			rarityLbl.TextSize = 12
 			rarityLbl.TextXAlignment = Enum.TextXAlignment.Left
 			rarityLbl.TextColor3 = COLORS.TextSecondary
-			rarityLbl.Text = string.format("%s • Power %d", cfg.Rarity, cfg.Power)
+			rarityLbl.Text = string.format("%s | Power %d", cfg.Rarity, cfg.Power)
 			rarityLbl.Parent = row
 
 			local statusBadge = Instance.new("TextLabel")

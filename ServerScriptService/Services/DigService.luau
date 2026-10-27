@@ -16,6 +16,7 @@ local PlayerState = require(script.Parent:WaitForChild("PlayerState"))
 local MoundService = require(script.Parent:WaitForChild("MoundService"))
 local ShovelInventoryService = require(script.Parent:WaitForChild("ShovelInventoryService"))
 local InventoryService = require(script.Parent:WaitForChild("InventoryService"))
+local SharedMoundService = require(script.Parent:WaitForChild("SharedMoundService"))
 
 export type StrikeSession = {
 	UserId: number,
@@ -85,6 +86,7 @@ end
 
 function DigService.CancelSession(userId: number)
 	activeSessionsByUserId[userId] = nil
+	SharedMoundService.CancelSession(userId)
 end
 
 function DigService.StartSession(
@@ -93,7 +95,11 @@ function DigService.StartSession(
 	moundId: string,
 	serverNowOverride: number?,
 	playerPosOverride: Vector3?
-): (boolean, string?, StrikeSession?)
+): (boolean, string?, any)
+	if SharedMoundService.IsSharedMound(moundId) then
+		return SharedMoundService.StartSession(userId, player, moundId, serverNowOverride, playerPosOverride)
+	end
+
 	local mound = MoundService.GetMound(userId, moundId)
 	if not mound or mound.HP <= 0 then
 		return false, "MoundNotFound", nil
@@ -158,7 +164,19 @@ function DigService.ExecuteStrike(
 	playerPosOverride: Vector3?,
 	latencyToleranceOverride: number?,
 	profileOverride: Types.PlayerProfile?
-): StrikeOutcome
+): any
+	if SharedMoundService.IsSharedMound(moundId) then
+		return SharedMoundService.ExecuteStrike(
+			userId,
+			player,
+			moundId,
+			serverNowOverride,
+			playerPosOverride,
+			latencyToleranceOverride,
+			profileOverride
+		)
+	end
+
 	local mound = MoundService.GetMound(userId, moundId)
 	if not mound or mound.HP <= 0 then
 		return {
@@ -294,6 +312,10 @@ function DigService.ApplyPetDamage(
 	damage: number,
 	petGuid: string
 ): (boolean, number, boolean)
+	if SharedMoundService.IsSharedMound(moundId) then
+		return SharedMoundService.ApplyPetDamage(player, userId, petGuid, damage)
+	end
+
 	local mound = MoundService.GetMound(userId, moundId)
 	if not mound then
 		return false, 0, false

@@ -82,21 +82,33 @@ function MoundVisuals.OnMoundClicked(callback: MoundClickedCallback)
 	table.insert(clickCallbacks, callback)
 end
 
-function MoundVisuals.GetMoundPosition(moundId: string): (Vector3?, string?)
+function MoundVisuals.GetMoundPosition(moundId: string): (Vector3?, string?, boolean?)
 	local entry = activeVisuals[moundId]
 	if not entry then
-		return nil, nil
+		return nil, nil, false
 	end
-	return entry.PrimaryPart.Position, entry.Size
+	local isShared = entry.Model:GetAttribute("IsShared") == true or entry.Size == "Shared"
+	return entry.PrimaryPart.Position, entry.Size, isShared
 end
 
-local function createBillboard(parentPart: Part, titleText: string, hp: number, maxHp: number): (Frame, TextLabel)
+function MoundVisuals.IsSharedMound(moundId: string): boolean
+	local entry = activeVisuals[moundId]
+	return entry ~= nil and (entry.Model:GetAttribute("IsShared") == true or entry.Size == "Shared")
+end
+
+local function createBillboard(
+	parentPart: Part,
+	titleText: string,
+	hp: number,
+	maxHp: number,
+	isShared: boolean?
+): (Frame, TextLabel)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "MoundBillboard"
-	billboard.Size = UDim2.fromOffset(145, 50)
+	billboard.Size = if isShared then UDim2.fromOffset(175, 54) else UDim2.fromOffset(145, 50)
 	billboard.StudsOffset = Vector3.new(0, (parentPart.Size.Y * 0.5) + 2.3, 0)
 	billboard.AlwaysOnTop = false
-	billboard.MaxDistance = 90
+	billboard.MaxDistance = if isShared then 250 else 90
 	billboard.Parent = parentPart
 
 	local bg = Instance.new("Frame")
@@ -118,8 +130,8 @@ local function createBillboard(parentPart: Part, titleText: string, hp: number, 
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBold
 	title.TextSize = 13
-	title.TextColor3 = Color3.fromRGB(255, 240, 200)
-	title.Text = titleText
+	title.TextColor3 = if isShared then Color3.fromRGB(255, 220, 80) else Color3.fromRGB(255, 240, 200)
+	title.Text = if isShared then "[RARE] " .. titleText else titleText
 	title.Parent = bg
 
 	local barBg = Instance.new("Frame")
@@ -138,7 +150,7 @@ local function createBillboard(parentPart: Part, titleText: string, hp: number, 
 	fill.Name = "Fill"
 	local ratio = if maxHp > 0 then math.clamp(hp / maxHp, 0, 1) else 0
 	fill.Size = UDim2.fromScale(ratio, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(95, 210, 105)
+	fill.BackgroundColor3 = if isShared then Color3.fromRGB(240, 180, 50) else Color3.fromRGB(95, 210, 105)
 	fill.BorderSizePixel = 0
 	fill.Parent = barBg
 
@@ -203,7 +215,7 @@ function MoundVisuals.SpawnMound(data: MoundVisualPayload)
 	clickDetector.Parent = basePart
 
 	model.PrimaryPart = basePart
-	local fillFrame, hpLabel = createBillboard(basePart, displayName, data.HP, data.MaxHP)
+	local fillFrame, hpLabel = createBillboard(basePart, displayName, data.HP, data.MaxHP, data.IsShared == true)
 	model.Parent = getContainerFolder()
 
 	local entry: MoundVisualEntry = {

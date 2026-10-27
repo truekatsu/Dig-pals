@@ -657,7 +657,7 @@ local function buildShopRows()
 			statsSub.TextXAlignment = Enum.TextXAlignment.Left
 			statsSub.TextTruncate = Enum.TextTruncate.AtEnd
 			statsSub.TextColor3 = COLORS.TextSecondary
-			statsSub.Text = string.format("Pwr %d • %.2fs • Luck %.2fx", cfg.Power, cfg.DigSpeed, cfg.Luck)
+			statsSub.Text = string.format("Pwr %d | %.2fs | Luck %.2fx", cfg.Power, cfg.DigSpeed, cfg.Luck)
 			statsSub.Parent = row
 
 			local statusBadge = Instance.new("TextLabel")

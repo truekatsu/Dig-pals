@@ -177,7 +177,7 @@ local function updatePlotSign(plotFolder: Folder, ownerPlayer: Player?, baseLeve
 	local lv = baseLevel or 1
 	local cfg = BaseConfig.Levels[lv] or BaseConfig.Levels[1]
 	sub.Text = if ownerPlayer
-		then string.format("Level %d • %d Inkubator • %d Pet", lv, cfg.IncubatorSlots, cfg.PetSlots)
+		then string.format("Level %d | %d Inkubator | %d Pet", lv, cfg.IncubatorSlots, cfg.PetSlots)
 		else "Tersedia untuk pemain"
 	sub.Parent = bg
 end
