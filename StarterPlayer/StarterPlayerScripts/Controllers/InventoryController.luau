@@ -770,7 +770,7 @@ function InventoryController.RegisterSideCategory(spec: SideCategorySpec): TextB
 	lbl.TextSize = 12
 	lbl.TextColor3 = COLORS.TextPrimary
 	lbl.TextStrokeTransparency = 0.45
-	lbl.Text = spec.Label
+	lbl.Text = spec.Label or (spec :: any).LabelText or spec.Id or ""
 	lbl.Parent = btn
 
 	btn.MouseEnter:Connect(function()

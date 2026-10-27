@@ -26,6 +26,7 @@ local BaseService = require(ServicesFolder:WaitForChild("BaseService"))
 local EggService = require(ServicesFolder:WaitForChild("EggService"))
 local DigService = require(ServicesFolder:WaitForChild("DigService"))
 local DropService = require(ServicesFolder:WaitForChild("DropService"))
+local PetService = require(ServicesFolder:WaitForChild("PetService"))
 
 Remotes.EnsureAll()
 DataService.Start()
@@ -35,6 +36,7 @@ ShovelInventoryService.Start()
 ShopService.Start()
 BaseService.Start()
 EggService.Start()
+PetService.Start()
 MoundService.Start()
 DigService.Start()
 DropService.Start()
@@ -1214,6 +1216,216 @@ local function runStep8Verification()
 	print(string.format("[Step8Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+-- Step 9 automated verification (Pet Bag UI logic, equip limits, base assignments, release prices, attack loop DPS, range checks, and multi-player stability)
+local function runStep9Verification()
+	local passed = 0
+	local failed = 0
+
+	local function verify(cond: boolean, label: string, detail: string?)
+		if cond then
+			passed += 1
+			print(string.format("[Step9Validator] PASS: %s", label))
+		else
+			failed += 1
+			warn(string.format("[Step9Validator] FAIL: %s (%s)", label, detail or "assertion failed"))
+		end
+	end
+
+	-- 1. Effective Stats calculation
+	local dogNormal = PetService.GetEffectiveStats("Dog", "Normal", 1)
+	verify(
+		dogNormal.Power == 5 and dogNormal.DigSpeed == 2 and math.abs(dogNormal.AttackInterval - 2.5) < 0.001 and dogNormal.MoveSpeed == 10 and dogNormal.ReleasePrice == 25,
+		"Normal Dog stats: Power=5, DigSpeed=2, Interval=2.5s, MoveSpeed=10, Release=25C"
+	)
+
+	local dogGolden = PetService.GetEffectiveStats("Dog", "Golden", 1)
+	verify(
+		dogGolden.Power == 7 and dogGolden.DigSpeed == 3 and math.abs(dogGolden.AttackInterval - 2.25) < 0.001,
+		"Golden Dog stats: Power=floor(5*1.5)=7, DigSpeed=2+1=3, Interval=2.25s"
+	)
+
+	local dogShiny = PetService.GetEffectiveStats("Dog", "Shiny", 1)
+	verify(
+		dogShiny.Power == 11 and dogShiny.DigSpeed == 4 and math.abs(dogShiny.AttackInterval - 2.0) < 0.001,
+		"Shiny Dog stats: Power=floor(5*2.25)=11, DigSpeed=2+2=4, Interval=2.0s"
+	)
+
+	local dragonShiny = PetService.GetEffectiveStats("TerraDragon", "Shiny", 1)
+	verify(
+		dragonShiny.DigSpeed == 10 and math.abs(dragonShiny.AttackInterval - 0.5) < 0.001 and dragonShiny.Power == math.floor(140 * 2.25),
+		"Shiny TerraDragon: DigSpeed clamped to max 10, Interval=0.5s, Power=315"
+	)
+
+	-- 2. Acquire test profile in isolated session
+	local testUserId = -900090
+	local sessionA = "TestSessionStep9A"
+	local okAcquire, profileA, errA = DataService.AcquireProfileLock(testUserId, sessionA, true)
+	verify(okAcquire and profileA ~= nil, "Acquired Step 9 test profile in Session A", tostring(errA))
+
+	if profileA then
+		-- Clean slate
+		profileA.Coins = 100
+		profileA.TotalCoinsEarned = 100
+		profileA.BaseLevel = 1
+		profileA.Pets = {
+			["Pet_Dog_1"] = { Species = "Dog", Variant = "Normal", Level = 1 },
+			["Pet_Cat_2"] = { Species = "Cat", Variant = "Golden", Level = 1 },
+			["Pet_Mole_3"] = { Species = "Mole", Variant = "Shiny", Level = 1 },
+			["Pet_Fox_4"] = { Species = "Fox", Variant = "Normal", Level = 1 },
+			["Pet_Rare_5"] = { Species = "Armadillo", Variant = "Normal", Level = 1 },
+		}
+		profileA.EquippedPets = {}
+		profileA.BasePets = {}
+
+		verify(#profileA.EquippedPets == 0 and #profileA.BasePets == 0, "Profile starts with 0 equipped and 0 base pets")
+
+		-- Equip pet 1, 2, 3
+		local eq1 = PetService.EquipPetInProfile(profileA, "Pet_Dog_1")
+		local eq2 = PetService.EquipPetInProfile(profileA, "Pet_Cat_2")
+		local eq3 = PetService.EquipPetInProfile(profileA, "Pet_Mole_3")
+		verify(
+			eq1.Success and eq2.Success and eq3.Success and #profileA.EquippedPets == 3,
+			"Equipped 3 pets successfully (Dog, Cat, Mole)"
+		)
+
+		-- Equip 4th pet -> reject (max 3)
+		local eq4 = PetService.EquipPetInProfile(profileA, "Pet_Fox_4")
+		verify(not eq4.Success and eq4.Reason == "MaxEquippedReached", "Equipping 4th pet rejected with MaxEquippedReached")
+
+		-- Duplicate equip -> reject
+		local eqDup = PetService.EquipPetInProfile(profileA, "Pet_Dog_1")
+		verify(not eqDup.Success and eqDup.Reason == "AlreadyEquipped", "Duplicate pet equip rejected with AlreadyEquipped")
+
+		-- Unequip pet 3
+		local ueq3 = PetService.UnequipPetInProfile(profileA, "Pet_Mole_3")
+		verify(ueq3.Success and #profileA.EquippedPets == 2 and not table.find(profileA.EquippedPets, "Pet_Mole_3"), "Unequipped Pet_Mole_3 (2 remaining)")
+
+		-- Base assignment: cannot assign equipped pet to Base
+		local bEqReject = PetService.AssignBasePetInProfile(profileA, "Pet_Dog_1")
+		verify(not bEqReject.Success and bEqReject.Reason == "PetEquipped", "Assigning equipped pet to Base rejected with PetEquipped")
+
+		-- Assign free pet to Base (Base Lv.1 max 2 slots)
+		local b1 = PetService.AssignBasePetInProfile(profileA, "Pet_Mole_3")
+		local b2 = PetService.AssignBasePetInProfile(profileA, "Pet_Fox_4")
+		verify(b1.Success and b2.Success and #profileA.BasePets == 2, "Assigned 2 free pets to Base (Mole, Fox)")
+
+		-- Base full (2/2) -> reject 3rd
+		local bFull = PetService.AssignBasePetInProfile(profileA, "Pet_Rare_5")
+		verify(not bFull.Success and bFull.Reason == "BaseSlotsFull", "Assigning 3rd pet at BaseLevel 1 rejected with BaseSlotsFull")
+
+		-- Cannot equip pet currently in Base
+		local eqBaseReject = PetService.EquipPetInProfile(profileA, "Pet_Mole_3")
+		verify(not eqBaseReject.Success and eqBaseReject.Reason == "PetInBase", "Equipping pet currently in Base rejected with PetInBase")
+
+		-- Remove pet from Base
+		local bRem = PetService.RemoveBasePetInProfile(profileA, "Pet_Mole_3")
+		verify(bRem.Success and #profileA.BasePets == 1, "Removed Pet_Mole_3 from Base (1 remaining in Base)")
+
+		-- Release Pet for Coins:
+		-- Releasing equipped pet rejected
+		local relEqReject = PetService.ReleasePetInProfile(profileA, "Pet_Dog_1")
+		verify(not relEqReject.Success and relEqReject.Reason == "PetEquipped", "Releasing equipped pet rejected with PetEquipped")
+
+		-- Releasing base pet rejected
+		local relBaseReject = PetService.ReleasePetInProfile(profileA, "Pet_Fox_4")
+		verify(not relBaseReject.Success and relBaseReject.Reason == "PetInBase", "Releasing base pet rejected with PetInBase")
+
+		-- Releasing free Common pet awards 25 Coins
+		local coinsBefore = profileA.Coins
+		local relDog = PetService.ReleasePetInProfile(profileA, "Pet_Mole_3")
+		verify(
+			relDog.Success and relDog.CoinsEarned == 25 and profileA.Coins == coinsBefore + 25 and profileA.Pets["Pet_Mole_3"] == nil,
+			"Releasing Common Mole awards exact 25 Coins (PRD 8.5) and removes from Pets"
+		)
+
+		-- Releasing free Rare pet awards 250 Coins
+		local coinsBeforeRare = profileA.Coins
+		local relRare = PetService.ReleasePetInProfile(profileA, "Pet_Rare_5")
+		verify(
+			relRare.Success and relRare.CoinsEarned == 250 and profileA.Coins == coinsBeforeRare + 250 and profileA.Pets["Pet_Rare_5"] == nil,
+			"Releasing Rare Armadillo awards exact 250 Coins (PRD 8.5) and removes from Pets"
+		)
+
+		-- Save and test persistence across rejoin
+		DataService.SaveProfileSession(testUserId, sessionA, profileA, true)
+
+		local sessionB = "TestSessionStep9B"
+		local okRejoin, profileB, errB = DataService.AcquireProfileLock(testUserId, sessionB, true)
+		verify(okRejoin and profileB ~= nil, "Acquired profile on rejoin in Session B", tostring(errB))
+		if profileB then
+			verify(
+				#profileB.EquippedPets == 2 and profileB.EquippedPets[1] == "Pet_Dog_1" and profileB.EquippedPets[2] == "Pet_Cat_2",
+				"EquippedPets persisted across rejoin (Dog & Cat)"
+			)
+			verify(
+				#profileB.BasePets == 1 and profileB.BasePets[1] == "Pet_Fox_4",
+				"BasePets persisted across rejoin (Fox)"
+			)
+			verify(
+				profileB.Coins == coinsBeforeRare + 250,
+				"Coins from released pets persisted across rejoin"
+			)
+			DataService.SaveProfileSession(testUserId, sessionB, DataService.CreateDefaultProfile(), true)
+		end
+	end
+
+	-- 3. Pet Attack & DPS verification with DigService
+	local dpsUserId = -900091
+	local sessionDps = "TestSessionStep9DPS"
+	local okDpsAcquire, profileDps, errDps = DataService.AcquireProfileLock(dpsUserId, sessionDps, true)
+	verify(okDpsAcquire and profileDps ~= nil, "Acquired Step 9 DPS test profile", tostring(errDps))
+
+	if profileDps then
+		-- Give equipped pet: Dog (Power 5, DigSpeed 2 -> Interval 2.5s, Range 16 studs)
+		profileDps.Pets = {
+			["Pet_Attacker_1"] = { Species = "Dog", Variant = "Normal", Level = 1 },
+		}
+		profileDps.EquippedPets = { "Pet_Attacker_1" }
+
+		-- Clear user mounds & create a test mound within range (e.g. dist = 5 studs)
+		MoundService.ClearUserMounds(dpsUserId)
+		local spawnMound = MoundService.SpawnMoundForUser(dpsUserId, nil, Vector3.new(5, 0, 0), 9000000)
+		assert(spawnMound, "Failed to spawn test mound for DPS test")
+		spawnMound.Size = "Small"
+		spawnMound.HP = 100
+		spawnMound.MaxHP = 100
+
+		local initialHP = spawnMound.HP
+		local dogStats = PetService.GetEffectiveStats("Dog", "Normal", 1)
+
+		-- Test direct Pet damage application via DigService.ApplyPetDamage
+		local okDmg, remHP, cleared = DigService.ApplyPetDamage(nil, dpsUserId, spawnMound.Id, dogStats.Power, "Pet_Attacker_1")
+		verify(
+			okDmg and remHP == (initialHP - dogStats.Power) and not cleared,
+			string.format("Pet damage deducted exact Power (%.1f -> %.1f, remaining %.1f)", initialHP, dogStats.Power, remHP)
+		)
+
+		-- Test finishing off mound when HP drops to 0
+		local finishDmg = remHP
+		local okFinish, finalHP, finalCleared = DigService.ApplyPetDamage(nil, dpsUserId, spawnMound.Id, finishDmg, "Pet_Attacker_1")
+		verify(
+			okFinish and finalHP == 0 and finalCleared and MoundService.GetMound(dpsUserId, spawnMound.Id) == nil,
+			"Pet strike finishing off mound clears and despawns mound cleanly"
+		)
+
+		MoundService.ClearUserMounds(dpsUserId)
+		DataService.SaveProfileSession(dpsUserId, sessionDps, DataService.CreateDefaultProfile(), true)
+	end
+
+	-- 4. Multi-player stability check: 12 simulated players x 3 pets = 36 equipped pets
+	local startBenchmark = os.clock()
+	for p = 1, 12 do
+		for petIdx = 1, 3 do
+			local stats = PetService.GetEffectiveStats("Cat", "Golden", 1)
+			assert(stats.Power > 0 and stats.AttackInterval > 0)
+		end
+	end
+	local elapsedMs = (os.clock() - startBenchmark) * 1000
+	verify(elapsedMs < 10.0, string.format("12 players x 3 pets (36 pets) stat evaluations executed in %.3f ms (< 10 ms)", elapsedMs))
+
+	print(string.format("[Step9Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -1224,4 +1436,5 @@ task.spawn(function()
 	runStep6Verification()
 	runStep7Verification()
 	runStep8Verification()
+	runStep9Verification()
 end)

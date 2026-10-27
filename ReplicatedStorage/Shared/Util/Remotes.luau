@@ -44,6 +44,7 @@
 	LevelUpPet              | RemoteFunction | Client -> Server| (petGuid: string)                 | 10
 	ReleasePet              | RemoteFunction | Client -> Server| (petGuid: string)                 | 10
 	OfflineIncomeSummary    | RemoteEvent    | Server -> Client| (summaryData: table)              | N/A
+	PetAttackVisual         | RemoteEvent    | Server -> Client| (petGuid: string, moundId: string, damage: number) | N/A
 
 	-- Shared Mound, Index, Quests, Streak, Tutorial, Sandy Gate (Steps 11-14)
 	SharedMoundAlert        | RemoteEvent    | Server -> Client| (alertData: table)                | N/A
@@ -358,6 +359,14 @@ local Specs: { [string]: RemoteSpec } = {
 		RateLimitPerSecond = DEFAULT_RATE_LIMIT,
 		Validators = {},
 		Description = "Server -> Client: Sends offline passive income popup summary on join.",
+	},
+	PetAttackVisual = {
+		Name = "PetAttackVisual",
+		Kind = "RemoteEvent",
+		Direction = "ServerToClient",
+		RateLimitPerSecond = DEFAULT_RATE_LIMIT,
+		Validators = {},
+		Description = "Server -> Client: Notifies client when an equipped pet strikes a mound (petGuid, moundId, damage).",
 	},
 
 	-- Shared Mound, Index, Quests, Streak, Tutorial, Sandy Gate (Steps 11-14)

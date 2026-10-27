@@ -287,6 +287,61 @@ function DigService.ExecuteStrike(
 	}
 end
 
+function DigService.ApplyPetDamage(
+	player: Player?,
+	userId: number,
+	moundId: string,
+	damage: number,
+	petGuid: string
+): (boolean, number, boolean)
+	local mound = MoundService.GetMound(userId, moundId)
+	if not mound then
+		return false, 0, false
+	end
+
+	if damage <= 0 then
+		return false, mound.HP, false
+	end
+
+	mound.HP = math.max(0, mound.HP - damage)
+	MoundService.TouchMound(userId, moundId)
+
+	print(
+		string.format(
+			"[DigService] PetStrike | UserId=%d | Pet=%s | Mound=%s (%s) | Damage=%.2f | HP=%.2f/%d",
+			userId,
+			petGuid,
+			mound.Id,
+			mound.Size,
+			damage,
+			mound.HP,
+			mound.MaxHP
+		)
+	)
+
+	local cleared = mound.HP <= 0
+
+	if player and player.Parent == Players then
+		Remotes.GetEvent("MoundUpdated"):FireClient(player, mound.Id, mound.HP, mound.MaxHP)
+		Remotes.GetEvent("PetAttackVisual"):FireClient(player, petGuid, mound.Id, damage)
+	end
+
+	if cleared then
+		if activeSessionsByUserId[userId] and activeSessionsByUserId[userId].MoundId == moundId then
+			activeSessionsByUserId[userId] = nil
+		end
+		for _, callback in moundClearedCallbacks do
+			local ok, err = pcall(callback, player, userId, mound)
+			if not ok then
+				warn(string.format("[DigService] Error in MoundClearedCallback from PetStrike: %s", tostring(err)))
+			end
+		end
+		MoundService.DespawnMound(userId, mound.Id, "Cleared")
+	end
+
+	return true, mound.HP, cleared
+end
+
 function DigService.Start()
 	if started then
 		return
