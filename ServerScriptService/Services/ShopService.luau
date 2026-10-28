@@ -214,7 +214,10 @@ function ShopService.EnsureShovelShopWorldPrompts()
 	local merchantFolder = plain and plain:FindFirstChild("Merchant")
 	local shopCounter = merchantFolder and merchantFolder:FindFirstChild("ShovelShop_Counter")
 	if shopCounter and shopCounter:IsA("BasePart") then
-		createShovelShopBillboard(shopCounter, Vector3.new(0, 4.4, 0))
+		local oldBillboard = shopCounter:FindFirstChild("ShovelShopSignGui")
+		if oldBillboard then
+			oldBillboard:Destroy()
+		end
 		attachShovelShopPrompt(shopCounter, Vector3.new(0, 1.8, 0))
 	end
 end

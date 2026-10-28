@@ -572,7 +572,10 @@ function InventoryService.EnsureMerchantWorldPrompts()
 	local merchantFolder = plain and plain:FindFirstChild("Merchant")
 	local hubCounter = merchantFolder and merchantFolder:FindFirstChild("ItemMerchant_Counter")
 	if hubCounter and hubCounter:IsA("BasePart") then
-		createMerchantBillboard(hubCounter, "ITEM MERCHANT", "Jual Hasil Galian & Upgrade Tas", Vector3.new(0, 4.4, 0))
+		local oldBillboard = hubCounter:FindFirstChild("MerchantSignGui")
+		if oldBillboard then
+			oldBillboard:Destroy()
+		end
 		attachMerchantPrompt(
 			hubCounter,
 			"Hub",
