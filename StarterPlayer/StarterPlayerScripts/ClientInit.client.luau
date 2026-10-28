@@ -15,6 +15,7 @@ local SharedMoundController = require(Controllers:WaitForChild("SharedMoundContr
 local DigController = require(Controllers:WaitForChild("DigController"))
 local IndexController = require(Controllers:WaitForChild("IndexController"))
 local QuestStreakController = require(Controllers:WaitForChild("QuestStreakController"))
+local LeaderboardController = require(Controllers:WaitForChild("LeaderboardController"))
 
 MoundVisuals.Start()
 HudController.Start()
@@ -29,3 +30,4 @@ SharedMoundController.Start()
 DigController.Start()
 IndexController.Start()
 QuestStreakController.Start()
+LeaderboardController.Start()

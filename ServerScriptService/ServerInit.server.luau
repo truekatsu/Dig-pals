@@ -33,6 +33,7 @@ local PassiveIncomeService = require(ServicesFolder:WaitForChild("PassiveIncomeS
 local SharedMoundService = require(ServicesFolder:WaitForChild("SharedMoundService"))
 local IndexService = require(ServicesFolder:WaitForChild("IndexService"))
 local QuestService = require(ServicesFolder:WaitForChild("QuestService"))
+local LeaderboardService = require(ServicesFolder:WaitForChild("LeaderboardService"))
 
 Remotes.EnsureAll()
 DataService.Start()
@@ -50,6 +51,7 @@ DigService.Start()
 DropService.Start()
 IndexService.Start()
 QuestService.Start()
+LeaderboardService.Start()
 
 -- Step 1 automated verification
 local function runStep1Verification()
@@ -1984,6 +1986,141 @@ local function runStep12Verification()
 	print(string.format("[Step12Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+local function runStep13Verification()
+	local passed = 0
+	local failed = 0
+	local function verify(cond: boolean, label: string, detail: string?)
+		if cond then
+			passed += 1
+			print(string.format("[Step13Validator] PASS: %s", label))
+		else
+			failed += 1
+			warn(string.format("[Step13Validator] FAIL: %s (%s)", label, detail or "assertion failed"))
+		end
+	end
+
+	print("[Step13Validator] Starting Step 13 verification (LeaderboardService & Competitions)...")
+
+	-- 1. Power Score Formula Verification (PRD 337: Power * (1 + DigSpeed / 10) * VariantMultiplier)
+	local dogNormalScore = LeaderboardService.CalculatePetPowerScore("Dog", "Normal")
+	verify(dogNormalScore == 6, string.format("Common Dog Normal Power Score is exactly 6 (got %d)", dogNormalScore))
+
+	local dogGoldenScore = LeaderboardService.CalculatePetPowerScore("Dog", "Golden")
+	verify(dogGoldenScore == 9, string.format("Common Dog Golden Power Score is exactly 9 (got %d)", dogGoldenScore))
+
+	local dogShinyScore = LeaderboardService.CalculatePetPowerScore("Dog", "Shiny")
+	verify(dogShinyScore == 13, string.format("Common Dog Shiny Power Score is exactly 13 (got %d)", dogShinyScore))
+
+	local dragonShinyScore = LeaderboardService.CalculatePetPowerScore("TerraDragon", "Shiny")
+	verify(dragonShinyScore == 598, string.format("Legendary TerraDragon Shiny Power Score is exactly 598 (got %d)", dragonShinyScore))
+
+	-- 2. Strongest Pet Selection in Profile
+	local testProfile = DataService.CreateDefaultProfile()
+	local p0Score, p0Species, _ = LeaderboardService.GetPlayerStrongestPetScore(testProfile)
+	verify(p0Score == 0 and p0Species == nil, "Profile with no pets returns 0 strongest pet score")
+
+	testProfile.Pets = {
+		PetA = { Species = "Dog", Variant = "Normal", Level = 1 },
+		PetB = { Species = "Dog", Variant = "Golden", Level = 1 },
+		PetC = { Species = "TerraDragon", Variant = "Shiny", Level = 1 },
+	}
+	local pMaxScore, pMaxSpecies, pMaxVariant = LeaderboardService.GetPlayerStrongestPetScore(testProfile)
+	verify(pMaxScore == 598, string.format("Player strongest pet selects TerraDragon Shiny with score 598 (got %d)", pMaxScore))
+	verify(pMaxSpecies == "TerraDragon" and pMaxVariant == "Shiny", "Identified correct species and variant for strongest pet")
+
+	-- 3. Weekly Coins & Monday 00:00 UTC Rollover
+	local sundayTimestamp = (10 * 86400) + 86340 -- Day 10 Sunday 23:59:00 UTC
+	LeaderboardService.SetTimeOverride(sundayTimestamp)
+	local weekSun = LeaderboardService.GetCurrentWeekId()
+
+	local mondayTimestamp = (11 * 86400) + 60 -- Day 11 Monday 00:01:00 UTC
+	LeaderboardService.SetTimeOverride(mondayTimestamp)
+	local weekMon = LeaderboardService.GetCurrentWeekId()
+	verify(weekMon == weekSun + 1, string.format("Monday 00:00 UTC advances week ID (%d -> %d)", weekSun, weekMon))
+
+	-- Test Weekly Coins isolation between weeks
+	local coinProfile = DataService.CreateDefaultProfile()
+	LeaderboardService.SetTimeOverride(sundayTimestamp)
+	LeaderboardService.RecordCoinsEarned(coinProfile, 1500)
+	verify(LeaderboardService.GetWeeklyCoins(coinProfile) == 1500, "Weekly coins recorded in Week 1")
+
+	-- Advance to Monday: new week resets active weekly coins to 0
+	LeaderboardService.SetTimeOverride(mondayTimestamp)
+	verify(LeaderboardService.GetWeeklyCoins(coinProfile) == 0, "New week resets active weekly coins to 0")
+
+	-- Earning coins in Monday week updates new week's balance
+	LeaderboardService.RecordCoinsEarned(coinProfile, 400)
+	verify(LeaderboardService.GetWeeklyCoins(coinProfile) == 400, "Coins earned in new week recorded under new week ID")
+
+	-- 4. OrderedDataStore Top 10 Ranking & Sorting
+	for i = 1, 12 do
+		local uId = 800000 + i
+		local uName = "Ranker_" .. tostring(i)
+		local prof = DataService.CreateDefaultProfile()
+		prof.TotalCoinsEarned = i * 1000
+		LeaderboardService.RecordCoinsEarned(prof, i * 500)
+		prof.Pets = {
+			PetInstance = { Species = "Dog", Variant = "Normal", Level = 1 },
+		}
+		LeaderboardService.UpdateProfileStats(uId, uName, prof)
+	end
+
+	local refreshed = LeaderboardService.RefreshLeaderboards()
+	verify(#refreshed.AllTimeCoins == 10, string.format("All-Time Coins returns exactly 10 entries (got %d)", #refreshed.AllTimeCoins))
+	verify(refreshed.AllTimeCoins[1].PlayerName == "Ranker_12", "Rank 1 is highest scorer (Ranker_12)")
+	verify(refreshed.AllTimeCoins[1].Score == 12000, "Rank 1 score is 12,000")
+	verify(refreshed.AllTimeCoins[10].PlayerName == "Ranker_3", "Rank 10 is 10th highest (Ranker_3)")
+	verify(refreshed.AllTimeCoins[10].Score == 3000, "Rank 10 score is 3,000")
+
+	-- Verify descending order
+	local isSorted = true
+	for i = 1, #refreshed.AllTimeCoins - 1 do
+		if refreshed.AllTimeCoins[i].Score < refreshed.AllTimeCoins[i + 1].Score then
+			isSorted = false
+		end
+	end
+	verify(isSorted == true, "Leaderboard entries are strictly sorted descending")
+
+	-- 5. Physical Hub Boards in Workspace
+	LeaderboardService.EnsureHubBoards()
+	local plain = workspace:FindFirstChild("Plain")
+	local hub = plain and plain:FindFirstChild("Hub")
+	local boardsFolder = hub and hub:FindFirstChild("LeaderboardBoards")
+	verify(boardsFolder ~= nil, "LeaderboardBoards folder exists in Workspace.Plain.Hub")
+
+	if boardsFolder then
+		local bWeekly = boardsFolder:FindFirstChild("Board_WeeklyCoins")
+		local bAllTime = boardsFolder:FindFirstChild("Board_AllTimeCoins")
+		local bPet = boardsFolder:FindFirstChild("Board_StrongestPet")
+
+		verify(bWeekly ~= nil, "Board_WeeklyCoins physical model exists")
+		verify(bAllTime ~= nil, "Board_AllTimeCoins physical model exists")
+		verify(bPet ~= nil, "Board_StrongestPet physical model exists")
+
+		if bWeekly then
+			local stand = bWeekly:FindFirstChild("BoardStand") :: BasePart?
+			local sGui = stand and stand:FindFirstChild("LeaderboardDisplay") :: SurfaceGui?
+			verify(sGui ~= nil, "Board_WeeklyCoins has SurfaceGui with display")
+			if sGui then
+				local rows = sGui:FindFirstChild("RowsContainer")
+				verify(rows ~= nil and #rows:GetChildren() >= 10, "SurfaceGui has at least 10 ranking row elements")
+			end
+		end
+	end
+
+	-- 6. Cached Serving (Zero DataStore Network Overhead on Client Calls)
+	local cachedPayload = LeaderboardService.GetCachedLeaderboards()
+	verify(cachedPayload ~= nil, "GetCachedLeaderboards returns valid payload")
+	verify(type(cachedPayload.WeeklyCoins) == "table", "Payload contains WeeklyCoins")
+	verify(type(cachedPayload.AllTimeCoins) == "table", "Payload contains AllTimeCoins")
+	verify(type(cachedPayload.StrongestPet) == "table", "Payload contains StrongestPet")
+
+	-- Cleanup override
+	LeaderboardService.SetTimeOverride(nil)
+
+	print(string.format("[Step13Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -1998,4 +2135,5 @@ task.spawn(function()
 	runStep10Verification()
 	runStep11Verification()
 	runStep12Verification()
+	runStep13Verification()
 end)

@@ -207,6 +207,8 @@ function InventoryService.AddDropToProfile(profile: Types.PlayerProfile, drop: D
 			local autoSellCoins = math.max(0, eggCfg.SellPrice)
 			profile.Coins = math.max(0, profile.Coins + autoSellCoins)
 			profile.TotalCoinsEarned += autoSellCoins
+			local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+			LeaderboardService.RecordCoinsEarned(profile, autoSellCoins)
 			drop.SellPrice = eggCfg.SellPrice
 			drop.AutoSold = true
 			drop.AutoSoldCoins = autoSellCoins
@@ -267,6 +269,8 @@ function InventoryService.SellItemInProfile(
 
 	profile.Coins = math.max(0, profile.Coins + earned)
 	profile.TotalCoinsEarned += earned
+	local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+	LeaderboardService.RecordCoinsEarned(profile, earned)
 
 	return {
 		Success = true,
@@ -309,6 +313,8 @@ function InventoryService.SellAllItemsInProfile(profile: Types.PlayerProfile): S
 	table.clear(profile.Items)
 	profile.Coins = math.max(0, profile.Coins + totalEarned)
 	profile.TotalCoinsEarned += totalEarned
+	local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+	LeaderboardService.RecordCoinsEarned(profile, totalEarned)
 
 	return {
 		Success = true,

@@ -150,7 +150,22 @@ export type PlayerProfile = {
 		Step: number,
 		Done: boolean,
 	},
+	WeeklyCoins: {
+		Week: number,
+		Coins: number,
+	}?,
 	LastSeen: number,
+}
+
+export type LeaderboardCategory = "WeeklyCoins" | "AllTimeCoins" | "StrongestPet"
+
+export type LeaderboardEntry = {
+	Rank: number,
+	UserId: number,
+	PlayerName: string,
+	Score: number,
+	FormattedScore: string,
+	ExtraInfo: string?,
 }
 
 return {}

@@ -251,6 +251,8 @@ function QuestService.ClaimQuestForProfile(
 	if rewardCoins > 0 then
 		profile.Coins = math.max(0, profile.Coins + rewardCoins)
 		profile.TotalCoinsEarned = math.max(0, profile.TotalCoinsEarned + rewardCoins)
+		local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+		LeaderboardService.RecordCoinsEarned(profile, rewardCoins)
 	end
 
 	if rewardEggId and EggsConfig.All[rewardEggId] then
@@ -318,6 +320,8 @@ function QuestService.ClaimStreakForProfile(
 	if rewardCoins > 0 then
 		profile.Coins = math.max(0, profile.Coins + rewardCoins)
 		profile.TotalCoinsEarned = math.max(0, profile.TotalCoinsEarned + rewardCoins)
+		local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+		LeaderboardService.RecordCoinsEarned(profile, rewardCoins)
 	end
 
 	if rewardEggId and EggsConfig.All[rewardEggId] then

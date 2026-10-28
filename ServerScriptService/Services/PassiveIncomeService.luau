@@ -173,6 +173,8 @@ function PassiveIncomeService.ProcessPlayerJoin(player: Player, profile: Types.P
 	if offlineResult.CoinsEarned > 0 then
 		profile.Coins = (profile.Coins or 0) + offlineResult.CoinsEarned
 		profile.TotalCoinsEarned = (profile.TotalCoinsEarned or 0) + offlineResult.CoinsEarned
+		local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+		LeaderboardService.RecordCoinsEarned(profile, offlineResult.CoinsEarned)
 		player:SetAttribute("Coins", profile.Coins)
 
 		-- Notify client with offline summary
@@ -209,6 +211,8 @@ local function onSecondTick()
 			if income > 0 then
 				profile.Coins = (profile.Coins or 0) + income
 				profile.TotalCoinsEarned = (profile.TotalCoinsEarned or 0) + income
+				local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+				LeaderboardService.RecordCoinsEarned(profile, income)
 				player:SetAttribute("Coins", profile.Coins)
 			end
 		end

@@ -83,6 +83,10 @@ function DataService.CreateDefaultProfile(): Types.PlayerProfile
 			Step = 1,
 			Done = false,
 		},
+		WeeklyCoins = {
+			Week = 0,
+			Coins = 0,
+		},
 		LastSeen = os.time(),
 	}
 end

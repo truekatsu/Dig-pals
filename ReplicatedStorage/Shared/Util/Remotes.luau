@@ -52,6 +52,8 @@
 	GetIndexData            | RemoteFunction | Client -> Server| ()                                | 5
 	ClaimQuest              | RemoteFunction | Client -> Server| (questId: string)                 | 5
 	ClaimStreak             | RemoteFunction | Client -> Server| ()                                | 5
+	GetLeaderboards         | RemoteFunction | Client -> Server| ()                                | 5
+	LeaderboardUpdated      | RemoteEvent    | Server -> Client| (payload: table)                  | N/A
 	UnlockSandyGate         | RemoteFunction | Client -> Server| ()                                | 5
 	AdvanceTutorial         | RemoteEvent    | Client -> Server| (step: posInt)                    | 5
 	StateSync               | RemoteEvent    | Server -> Client| (statePayload: table)             | N/A
@@ -411,6 +413,22 @@ local Specs: { [string]: RemoteSpec } = {
 		RateLimitPerSecond = 5,
 		Validators = {},
 		Description = "Client -> Server: Claims daily login streak reward.",
+	},
+	GetLeaderboards = {
+		Name = "GetLeaderboards",
+		Kind = "RemoteFunction",
+		Direction = "ClientToServer",
+		RateLimitPerSecond = 5,
+		Validators = {},
+		Description = "Client -> Server: Fetches cached top 10 leaderboard rankings for all categories.",
+	},
+	LeaderboardUpdated = {
+		Name = "LeaderboardUpdated",
+		Kind = "RemoteEvent",
+		Direction = "ServerToClient",
+		RateLimitPerSecond = DEFAULT_RATE_LIMIT,
+		Validators = {},
+		Description = "Server -> Client: Broadcasts updated leaderboard top 10 data when refreshed.",
 	},
 	UnlockSandyGate = {
 		Name = "UnlockSandyGate",
