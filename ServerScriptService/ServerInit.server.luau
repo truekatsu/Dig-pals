@@ -34,6 +34,7 @@ local SharedMoundService = require(ServicesFolder:WaitForChild("SharedMoundServi
 local IndexService = require(ServicesFolder:WaitForChild("IndexService"))
 local QuestService = require(ServicesFolder:WaitForChild("QuestService"))
 local LeaderboardService = require(ServicesFolder:WaitForChild("LeaderboardService"))
+local TutorialService = require(ServicesFolder:WaitForChild("TutorialService"))
 
 Remotes.EnsureAll()
 DataService.Start()
@@ -52,6 +53,7 @@ DropService.Start()
 IndexService.Start()
 QuestService.Start()
 LeaderboardService.Start()
+TutorialService.Start()
 
 -- Step 1 automated verification
 local function runStep1Verification()
@@ -2121,6 +2123,124 @@ local function runStep13Verification()
 	print(string.format("[Step13Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+local function runStep14Verification()
+	local passed = 0
+	local failed = 0
+	local function verify(cond: boolean, label: string, detail: string?)
+		if cond then
+			passed += 1
+			print(string.format("[Step14Validator] PASS: %s", label))
+		else
+			failed += 1
+			warn(string.format("[Step14Validator] FAIL: %s (%s)", label, detail or "assertion failed"))
+		end
+	end
+
+	print("[Step14Validator] Starting Step 14 verification (Onboarding & Sandy Gate)...")
+
+	-- 1. Initial State for New Players (PRD 351: Rusty Shovel, 100 coin, and Telur Starter)
+	local newProfile = DataService.CreateDefaultProfile()
+	verify(newProfile.Coins == 100, "New player starts with 100 Coins")
+	verify(table.find(newProfile.Shovels.Owned, "RustyShovel") ~= nil, "New player starts with Rusty Shovel owned")
+	verify(newProfile.Shovels.Equipped == "RustyShovel", "New player starts with Rusty Shovel equipped")
+	verify(#newProfile.EggBag == 1 and newProfile.EggBag[1].Id == "StarterEgg", "New player starts with exactly 1 Starter Egg in EggBag")
+	verify(newProfile.Tutorial.Step == 1, "Tutorial starts at Step 1")
+	verify(newProfile.Tutorial.Done == false, "Tutorial starts with Done == false")
+	verify(newProfile.SandyGateUnlocked == false, "SandyGateUnlocked starts false")
+
+	-- 2. Starter Egg Configuration (PRD 351: menetas 20 detik jadi Dog atau Cat)
+	local starterEggCfg = EggsConfig.All["StarterEgg"]
+	verify(starterEggCfg ~= nil, "StarterEgg exists in EggsConfig.All")
+	verify(starterEggCfg.IncubationSeconds == 20, string.format("Starter Egg incubation is exactly 20 seconds (got %d)", starterEggCfg.IncubationSeconds))
+	verify(starterEggCfg.SpeciesWeights.Dog == 50 and starterEggCfg.SpeciesWeights.Cat == 50, "Starter Egg hatches into Dog or Cat (50/50)")
+
+	-- 3. Sequential Tutorial Progression (Anti-skip enforcement)
+	local tutProfile = DataService.CreateDefaultProfile()
+	local skipAttempt = TutorialService.AdvanceStepForProfile(tutProfile, 3)
+	verify(skipAttempt == false and tutProfile.Tutorial.Step == 1, "Skipping tutorial steps out-of-order is rejected")
+
+	local adv1 = TutorialService.AdvanceStepForProfile(tutProfile, 1)
+	verify(adv1 == true and tutProfile.Tutorial.Step == 2, "Step 1 (Dig Small Mound) advances to Step 2")
+
+	local adv2 = TutorialService.AdvanceStepForProfile(tutProfile, 2)
+	verify(adv2 == true and tutProfile.Tutorial.Step == 3, "Step 2 (Sell Item) advances to Step 3")
+
+	local adv3 = TutorialService.AdvanceStepForProfile(tutProfile, 3)
+	verify(adv3 == true and tutProfile.Tutorial.Step == 4, "Step 3 (Hatch Starter Egg) advances to Step 4")
+
+	local adv4 = TutorialService.AdvanceStepForProfile(tutProfile, 4)
+	verify(adv4 == true and tutProfile.Tutorial.Step == 5, "Step 4 (Equip Pet & Dig) advances to Step 5")
+
+	local adv5 = TutorialService.AdvanceStepForProfile(tutProfile, 5)
+	verify(adv5 == true and tutProfile.Tutorial.Done == true, "Step 5 (Explore Shop & Quest) marks tutorial Done == true")
+
+	local postDoneAttempt = TutorialService.AdvanceStepForProfile(tutProfile, 5)
+	verify(postDoneAttempt == false and tutProfile.Tutorial.Done == true, "Advancing after completion is rejected safely")
+
+	-- 4. Sandy Gate Requirements & Unlock Validation (PRD 353: Iron Shovel+ & 10.000 coin)
+	local poorProfile = DataService.CreateDefaultProfile()
+	local ok1, reason1 = TutorialService.UnlockSandyGateForProfile(poorProfile)
+	verify(ok1 == false and reason1 == "NeedIronShovel", "Unlock rejected when lacking Iron Shovel (NeedIronShovel)")
+
+	local stoneProfile = DataService.CreateDefaultProfile()
+	table.insert(stoneProfile.Shovels.Owned, "StoneShovel")
+	stoneProfile.Coins = 15000
+	local ok2, reason2 = TutorialService.UnlockSandyGateForProfile(stoneProfile)
+	verify(ok2 == false and reason2 == "NeedIronShovel", "Unlock rejected with Stone Shovel even with 15k coins (NeedIronShovel)")
+
+	local ironPoorProfile = DataService.CreateDefaultProfile()
+	table.insert(ironPoorProfile.Shovels.Owned, "IronShovel")
+	ironPoorProfile.Coins = 5000
+	local ok3, reason3 = TutorialService.UnlockSandyGateForProfile(ironPoorProfile)
+	verify(ok3 == false and reason3 == "NotEnoughCoins", "Unlock rejected when Coins (5,000) < 10,000 (NotEnoughCoins)")
+
+	local eligibleProfile = DataService.CreateDefaultProfile()
+	table.insert(eligibleProfile.Shovels.Owned, "IronShovel")
+	eligibleProfile.Coins = 10000
+	local ok4, reason4, msg4 = TutorialService.UnlockSandyGateForProfile(eligibleProfile)
+	verify(ok4 == true and eligibleProfile.SandyGateUnlocked == true, "Unlock succeeds with Iron Shovel and 10,000 coins")
+	verify(eligibleProfile.Coins == 0, "Exact 10,000 coins deducted upon unlocking Sandy Gate")
+
+	local diamondProfile = DataService.CreateDefaultProfile()
+	table.insert(diamondProfile.Shovels.Owned, "DiamondShovel")
+	diamondProfile.Coins = 12000
+	local ok5, _, _ = TutorialService.UnlockSandyGateForProfile(diamondProfile)
+	verify(ok5 == true and diamondProfile.SandyGateUnlocked == true, "Unlock succeeds with higher-tier shovel (DiamondShovel)")
+	verify(diamondProfile.Coins == 2000, "Coins deducted correctly (12,000 - 10,000 = 2,000)")
+
+	local okDup, reasonDup = TutorialService.UnlockSandyGateForProfile(eligibleProfile)
+	verify(okDup == false and reasonDup == "AlreadyUnlocked", "Duplicate unlock attempt safely rejected (AlreadyUnlocked)")
+
+	-- 5. Physical Sandy Gate in Workspace
+	TutorialService.EnsureSandyGateInWorkspace()
+	local plain = workspace:FindFirstChild("Plain")
+	local sandyGateFolder = plain and plain:FindFirstChild("SandyGate")
+	verify(sandyGateFolder ~= nil, "SandyGate folder exists in Workspace.Plain")
+
+	if sandyGateFolder then
+		local portcullis = sandyGateFolder:FindFirstChild("SandyGate_Portcullis") :: BasePart?
+		local padlock = sandyGateFolder:FindFirstChild("SandyGate_Padlock") :: BasePart?
+		local signboard = sandyGateFolder:FindFirstChild("GateSign_Board") :: BasePart?
+		local lockedSand = sandyGateFolder:FindFirstChild("LockedArea_Sand") :: BasePart?
+
+		verify(portcullis ~= nil and portcullis.Anchored == true, "SandyGate_Portcullis is anchored")
+		verify(padlock ~= nil, "SandyGate_Padlock exists")
+		verify(signboard ~= nil, "GateSign_Board exists")
+
+		if signboard then
+			local sGui = signboard:FindFirstChild("GateSignDisplay") :: SurfaceGui?
+			verify(sGui ~= nil, "GateSign_Board has GateSignDisplay SurfaceGui")
+		end
+
+		if lockedSand then
+			local bb = lockedSand:FindFirstChild("ComingSoonBillboard") :: BillboardGui?
+			verify(bb ~= nil, "LockedArea_Sand placeholder contains ComingSoonBillboard")
+		end
+	end
+
+	print(string.format("[Step14Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -2136,4 +2256,5 @@ task.spawn(function()
 	runStep11Verification()
 	runStep12Verification()
 	runStep13Verification()
+	runStep14Verification()
 end)

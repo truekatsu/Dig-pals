@@ -470,10 +470,12 @@ function EggService.Start()
 
 			local IndexService = require(script.Parent:WaitForChild("IndexService"))
 			local QuestService = require(script.Parent:WaitForChild("QuestService"))
+			local TutorialService = require(script.Parent:WaitForChild("TutorialService"))
 			if result.Species then
 				local profile = PlayerState.Get(player)
 				if profile then
 					IndexService.RegisterPetDiscovery(player, profile, result.Species)
+					TutorialService.OnEggHatched(player, profile, result.Species)
 				end
 			end
 			QuestService.RecordProgress(player, "EggHatched", 1)

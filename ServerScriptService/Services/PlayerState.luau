@@ -45,6 +45,11 @@ function PlayerState.SyncAttributes(player: Player, profile: Types.PlayerProfile
 	player:SetAttribute("EggCount", #profile.EggBag)
 	player:SetAttribute("EggCapacity", eggCapacity)
 	player:SetAttribute("EquippedShovel", profile.Shovels.Equipped)
+	player:SetAttribute("SandyGateUnlocked", profile.SandyGateUnlocked == true)
+	if profile.Tutorial then
+		player:SetAttribute("TutorialStep", profile.Tutorial.Step or 1)
+		player:SetAttribute("TutorialDone", profile.Tutorial.Done == true)
+	end
 end
 
 local function notifyListeners(player: Player, profile: Types.PlayerProfile)

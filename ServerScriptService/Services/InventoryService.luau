@@ -667,6 +667,8 @@ function InventoryService.SellItem(
 	if result.Success and (result.CoinsEarned or 0) > 0 then
 		local QuestService = require(script.Parent:WaitForChild("QuestService"))
 		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
+		local TutorialService = require(script.Parent:WaitForChild("TutorialService"))
+		TutorialService.OnItemSold(player, profile)
 	end
 
 	return result
@@ -710,6 +712,8 @@ function InventoryService.SellAllItems(player: Player, bypassProximityForTest: b
 	if result.Success and (result.CoinsEarned or 0) > 0 then
 		local QuestService = require(script.Parent:WaitForChild("QuestService"))
 		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
+		local TutorialService = require(script.Parent:WaitForChild("TutorialService"))
+		TutorialService.OnItemSold(player, profile)
 	end
 
 	return result

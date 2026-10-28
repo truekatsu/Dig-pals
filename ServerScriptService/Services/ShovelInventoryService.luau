@@ -259,6 +259,11 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 			Day = if profile.Streak then (profile.Streak.Day or 0) else 0,
 			LastClaim = if profile.Streak then (profile.Streak.LastClaim or 0) else 0,
 		},
+		Tutorial = {
+			Step = if profile.Tutorial then (profile.Tutorial.Step or 1) else 1,
+			Done = if profile.Tutorial then (profile.Tutorial.Done == true) else false,
+		},
+		SandyGateUnlocked = profile.SandyGateUnlocked == true,
 		Title = player:GetAttribute("Title") :: string?,
 	}
 end

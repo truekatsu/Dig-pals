@@ -238,6 +238,12 @@ function DropService.ProcessClearedMound(
 		if mound.Size == "Medium" or mound.Size == "Large" then
 			QuestService.RecordProgress(player, "MediumOrLargeMoundCleared", 1)
 		end
+
+		local TutorialService = require(script.Parent:WaitForChild("TutorialService"))
+		local prof = PlayerState.Get(player)
+		if prof then
+			TutorialService.OnMoundCleared(player, prof, false)
+		end
 	end
 
 	local summary: MoundDropSummary = {

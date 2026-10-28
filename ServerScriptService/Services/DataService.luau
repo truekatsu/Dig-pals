@@ -62,7 +62,12 @@ function DataService.CreateDefaultProfile(): Types.PlayerProfile
 		BagLevel = Economy.StartingBagLevel,
 		BaseLevel = Economy.StartingBaseLevel,
 		Items = {},
-		EggBag = {},
+		EggBag = {
+			{
+				Id = "StarterEgg",
+				Rarity = "Common",
+			},
+		},
 		Incubators = {},
 		Pets = {},
 		EquippedPets = {},
@@ -83,6 +88,7 @@ function DataService.CreateDefaultProfile(): Types.PlayerProfile
 			Step = 1,
 			Done = false,
 		},
+		SandyGateUnlocked = false,
 		WeeklyCoins = {
 			Week = 0,
 			Coins = 0,

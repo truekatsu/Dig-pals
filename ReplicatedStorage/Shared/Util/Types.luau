@@ -150,6 +150,7 @@ export type PlayerProfile = {
 		Step: number,
 		Done: boolean,
 	},
+	SandyGateUnlocked: boolean?,
 	WeeklyCoins: {
 		Week: number,
 		Coins: number,
