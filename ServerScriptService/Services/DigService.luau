@@ -239,12 +239,24 @@ function DigService.ExecuteStrike(
 	local multiplier = (MoundsConfig.StrikeDamageMultipliers :: any)[grade] or 0.25
 	local damage = shovel.Power * multiplier
 
+	local QuestService = require(script.Parent:WaitForChild("QuestService"))
+
 	if grade == "Perfect" then
 		mound.PerfectCount += 1
+		if player then
+			QuestService.RecordProgress(player, "PerfectStrike", 1)
+			QuestService.RecordProgress(player, "PerfectStrikeTotal", 1)
+		end
 	elseif grade == "Good" then
 		mound.GoodCount += 1
+		if player then
+			QuestService.RecordProgress(player, "BreakPerfectStreak", 1)
+		end
 	else
 		mound.MissCount += 1
+		if player then
+			QuestService.RecordProgress(player, "BreakPerfectStreak", 1)
+		end
 	end
 
 	session.LastStrikeTime = serverNow

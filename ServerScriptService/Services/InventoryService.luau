@@ -658,6 +658,11 @@ function InventoryService.SellItem(
 		}
 	end
 
+	if result.Success and (result.CoinsEarned or 0) > 0 then
+		local QuestService = require(script.Parent:WaitForChild("QuestService"))
+		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
+	end
+
 	return result
 end
 
@@ -694,6 +699,11 @@ function InventoryService.SellAllItems(player: Player, bypassProximityForTest: b
 			Reason = "MutateFailed",
 			Message = "Gagal menjual isi tas.",
 		}
+	end
+
+	if result.Success and (result.CoinsEarned or 0) > 0 then
+		local QuestService = require(script.Parent:WaitForChild("QuestService"))
+		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
 	end
 
 	return result

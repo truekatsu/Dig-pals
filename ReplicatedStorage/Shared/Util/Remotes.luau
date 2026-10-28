@@ -48,6 +48,8 @@
 
 	-- Shared Mound, Index, Quests, Streak, Tutorial, Sandy Gate (Steps 11-14)
 	SharedMoundAlert        | RemoteEvent    | Server -> Client| (alertData: table)                | N/A
+	IndexAlert              | RemoteEvent    | Server -> Client| (alertData: table)                | N/A
+	GetIndexData            | RemoteFunction | Client -> Server| ()                                | 5
 	ClaimQuest              | RemoteFunction | Client -> Server| (questId: string)                 | 5
 	ClaimStreak             | RemoteFunction | Client -> Server| ()                                | 5
 	UnlockSandyGate         | RemoteFunction | Client -> Server| ()                                | 5
@@ -377,6 +379,22 @@ local Specs: { [string]: RemoteSpec } = {
 		RateLimitPerSecond = DEFAULT_RATE_LIMIT,
 		Validators = {},
 		Description = "Server -> Client: Broadcasts Rare Mound spawn and expiration notifications.",
+	},
+	IndexAlert = {
+		Name = "IndexAlert",
+		Kind = "RemoteEvent",
+		Direction = "ServerToClient",
+		RateLimitPerSecond = DEFAULT_RATE_LIMIT,
+		Validators = {},
+		Description = "Server -> Client: Notifies client when a new item/pet is discovered or a rarity set is completed.",
+	},
+	GetIndexData = {
+		Name = "GetIndexData",
+		Kind = "RemoteFunction",
+		Direction = "ClientToServer",
+		RateLimitPerSecond = 5,
+		Validators = {},
+		Description = "Client -> Server: Fetches complete index discovery and completion stats.",
 	},
 	ClaimQuest = {
 		Name = "ClaimQuest",

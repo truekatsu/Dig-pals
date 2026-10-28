@@ -38,6 +38,10 @@ export type InventorySnapshot = {
 	Pets: { [string]: Types.PetInstance },
 	EquippedPets: { string },
 	BasePets: { string },
+	Index: { Pets: { [string]: boolean }, Items: { [string]: boolean } }?,
+	Quests: { Day: number, List: { Types.QuestEntry } }?,
+	Streak: { Day: number, LastClaim: number }?,
+	Title: string?,
 }
 
 local ShovelInventoryService = {}
@@ -243,6 +247,19 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 		Pets = petsCopy,
 		EquippedPets = equippedPetsCopy,
 		BasePets = basePetsCopy,
+		Index = {
+			Pets = if profile.Index and profile.Index.Pets then table.clone(profile.Index.Pets) else {},
+			Items = if profile.Index and profile.Index.Items then table.clone(profile.Index.Items) else {},
+		},
+		Quests = {
+			Day = if profile.Quests then (profile.Quests.Day or 0) else 0,
+			List = if profile.Quests and profile.Quests.List then table.clone(profile.Quests.List) else {},
+		},
+		Streak = {
+			Day = if profile.Streak then (profile.Streak.Day or 0) else 0,
+			LastClaim = if profile.Streak then (profile.Streak.LastClaim or 0) else 0,
+		},
+		Title = player:GetAttribute("Title") :: string?,
 	}
 end
 

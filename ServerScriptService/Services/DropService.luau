@@ -219,11 +219,25 @@ function DropService.ProcessClearedMound(
 	local drops = DropService.RollMoundDrops(mound.Size, effectiveLuck, rngOverride)
 
 	if player and profile then
+		local IndexService = require(script.Parent:WaitForChild("IndexService"))
+		local QuestService = require(script.Parent:WaitForChild("QuestService"))
+
 		PlayerState.Mutate(player, function(mutableProfile: Types.PlayerProfile)
 			for _, drop in drops do
 				InventoryService.AddDropToProfile(mutableProfile, drop)
+				if drop.DropType == "Item" then
+					IndexService.RegisterItemDiscovery(player, mutableProfile, drop.Id)
+					if drop.Rarity == "Rare" or drop.Rarity == "Epic" or drop.Rarity == "Legendary" then
+						QuestService.RecordProgress(player, "RareOrHigherItemFound", 1)
+					end
+				end
 			end
 		end)
+
+		QuestService.RecordProgress(player, "MoundCleared", 1)
+		if mound.Size == "Medium" or mound.Size == "Large" then
+			QuestService.RecordProgress(player, "MediumOrLargeMoundCleared", 1)
+		end
 	end
 
 	local summary: MoundDropSummary = {

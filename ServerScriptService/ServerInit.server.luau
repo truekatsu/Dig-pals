@@ -12,6 +12,8 @@ local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"
 local PetsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Pets"))
 local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rarity"))
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
+local ItemsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Items"))
+local QuestsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Quests"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local Weighted = require(Shared:WaitForChild("Util"):WaitForChild("Weighted"))
 
@@ -29,6 +31,8 @@ local DropService = require(ServicesFolder:WaitForChild("DropService"))
 local PetService = require(ServicesFolder:WaitForChild("PetService"))
 local PassiveIncomeService = require(ServicesFolder:WaitForChild("PassiveIncomeService"))
 local SharedMoundService = require(ServicesFolder:WaitForChild("SharedMoundService"))
+local IndexService = require(ServicesFolder:WaitForChild("IndexService"))
+local QuestService = require(ServicesFolder:WaitForChild("QuestService"))
 
 Remotes.EnsureAll()
 DataService.Start()
@@ -44,6 +48,8 @@ SharedMoundService.Start()
 MoundService.Start()
 DigService.Start()
 DropService.Start()
+IndexService.Start()
+QuestService.Start()
 
 -- Step 1 automated verification
 local function runStep1Verification()
@@ -1762,6 +1768,222 @@ local function runStep11Verification()
 	print(string.format("[Step11Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+local function runStep12Verification()
+	local passed = 0
+	local failed = 0
+	local function verify(cond: boolean, label: string, detail: string?)
+		if cond then
+			passed += 1
+			print(string.format("[Step12Validator] PASS: %s", label))
+		else
+			failed += 1
+			warn(string.format("[Step12Validator] FAIL: %s (%s)", label, detail or "assertion failed"))
+		end
+	end
+
+	print("[Step12Validator] Starting Step 12 verification (Index, Daily Quests, 7-Day Streak)...")
+
+	-- Part 1: Index Service & Bonuses
+	local testProfile = DataService.CreateDefaultProfile()
+	verify(type(testProfile.Index) == "table", "Profile has Index table initialized")
+	verify(type(testProfile.Index.Items) == "table", "Profile has Index.Items table")
+	verify(type(testProfile.Index.Pets) == "table", "Profile has Index.Pets table")
+
+	-- Verify pool counts (PRD: 20 items across 5 rarities, 25 pets across 5 rarities)
+	local itemCount = 0
+	for _ in pairs(ItemsConfig.All) do
+		itemCount += 1
+	end
+	verify(itemCount == 20, string.format("Config has exactly 20 items (got %d)", itemCount))
+	local petSpeciesCount = 0
+	for _ in pairs(PetsConfig.Species) do
+		petSpeciesCount += 1
+	end
+	verify(petSpeciesCount == 25, string.format("Config has exactly 25 pet species (got %d)", petSpeciesCount))
+
+	-- First item discovery
+	local isNew1, completedRarities1, allComp1 = IndexService.RegisterItemDiscovery(nil, testProfile, "Pebble")
+	verify(isNew1 == true, "First item discovery returns isNew == true")
+	verify(testProfile.Index.Items["Pebble"] == true, "Pebble marked discovered in profile.Index.Items")
+	verify(#completedRarities1 == 0, "Single item does not complete Common rarity")
+	verify(allComp1 == false, "Single item does not complete whole Index")
+
+	-- Re-discovery of same item returns isNew == false
+	local isNewRepeat, _, _ = IndexService.RegisterItemDiscovery(nil, testProfile, "Pebble")
+	verify(isNewRepeat == false, "Re-discovering Pebble returns isNew == false (idempotent)")
+
+	-- Complete Common item rarity: Pebble, ClayLump, TwistedRoot, OldBottleCap, RustyNail, CrackedShell (6 items)
+	IndexService.RegisterItemDiscovery(nil, testProfile, "ClayLump")
+	IndexService.RegisterItemDiscovery(nil, testProfile, "TwistedRoot")
+	IndexService.RegisterItemDiscovery(nil, testProfile, "OldBottleCap")
+	IndexService.RegisterItemDiscovery(nil, testProfile, "RustyNail")
+	local _, completedRaritiesCommon, _ = IndexService.RegisterItemDiscovery(nil, testProfile, "CrackedShell")
+	verify(table.find(completedRaritiesCommon, "Common") ~= nil, "Completing all 6 Common items reports 'Common' completed")
+	local isCommonComp, discCount, totalCount = IndexService.IsItemRarityComplete(testProfile, "Common")
+	verify(isCommonComp == true and discCount == 6 and totalCount == 6, "IsItemRarityComplete(Common) is true (6/6)")
+
+	-- Reward for 1 item rarity complete: +0.03 Luck permanen
+	local luckBonus = IndexService.ComputeItemIndexLuckBonus(testProfile)
+	verify(math.abs(luckBonus - 0.03) < 0.001, string.format("Item rarity bonus is exactly +0.03 Luck (got %.2f)", luckBonus))
+
+	-- Complete Common pet rarity: Dog, Cat, Mole, Bunny, Hamster, Chick (6 species)
+	IndexService.RegisterPetDiscovery(nil, testProfile, "Dog")
+	IndexService.RegisterPetDiscovery(nil, testProfile, "Cat")
+	IndexService.RegisterPetDiscovery(nil, testProfile, "Mole")
+	IndexService.RegisterPetDiscovery(nil, testProfile, "Bunny")
+	IndexService.RegisterPetDiscovery(nil, testProfile, "Hamster")
+	local _, completedPetCommon, _ = IndexService.RegisterPetDiscovery(nil, testProfile, "Chick")
+	verify(table.find(completedPetCommon, "Common") ~= nil, "Completing all 6 Common pets reports 'Common' completed")
+	local isPetCommonComp, petDisc, petTot = IndexService.IsPetRarityComplete(testProfile, "Common")
+	verify(isPetCommonComp == true and petDisc == 6 and petTot == 6, "IsPetRarityComplete(Common) is true (6/6)")
+
+	-- Reward for 1 pet rarity complete: +3% income permanen
+	local incomeBonus = IndexService.ComputePetIndexIncomeBonus(testProfile)
+	verify(math.abs(incomeBonus - 0.03) < 0.001, string.format("Pet rarity bonus is exactly +3%% Income (got %.2f)", incomeBonus))
+
+	-- Verify PassiveIncomeService factors in the Pet Index bonus
+	testProfile.Pets = {
+		PetTest = { Species = "Dog", Variant = "Normal", Level = 1 },
+	}
+	testProfile.BasePets = { "PetTest" }
+	local baseIncome = PassiveIncomeService.CalculatePetIncome("Dog", "Normal", 1)
+	local totalPlayerIncome = PassiveIncomeService.CalculatePlayerIncome(testProfile)
+	verify(totalPlayerIncome >= baseIncome, "PassiveIncomeService successfully incorporates Pet Index income bonus")
+
+	-- Complete ALL items and pets to unlock Title: "Master Excavator"
+	for _, itemCfg in pairs(ItemsConfig.All) do
+		IndexService.RegisterItemDiscovery(nil, testProfile, itemCfg.Id)
+	end
+	for speciesId in pairs(PetsConfig.Species) do
+		IndexService.RegisterPetDiscovery(nil, testProfile, speciesId)
+	end
+	verify(IndexService.IsAllComplete(testProfile) == true, "IsAllComplete(profile) is true when all 20 items and 25 pets discovered")
+	local fullLuckBonus = IndexService.ComputeItemIndexLuckBonus(testProfile)
+	verify(math.abs(fullLuckBonus - 0.15) < 0.001, string.format("Full 5 item rarities yield +0.15 Luck (got %.2f)", fullLuckBonus))
+	local fullIncomeBonus = IndexService.ComputePetIndexIncomeBonus(testProfile)
+	verify(math.abs(fullIncomeBonus - 0.15) < 0.001, string.format("Full 5 pet rarities yield +15%% Income (got %.2f)", fullIncomeBonus))
+	local indexSummary = IndexService.GetIndexProgress(testProfile)
+	verify(indexSummary.IsAllComplete == true, "GetIndexProgress reflects IsAllComplete == true")
+	verify(indexSummary.Title == "Master Excavator", "Full completion grants title 'Master Excavator'")
+
+	-- Part 2: Daily Quests
+	local testUserId = 777123
+	local baseDay = 20000 -- simulated day index
+	QuestService.SetTimeOverride(baseDay * 86400 + 1000)
+
+	local qProfile = DataService.CreateDefaultProfile()
+	QuestService.EnsureProfileQuests(qProfile, testUserId)
+	verify(type(qProfile.Quests) == "table", "qProfile.Quests initialized")
+	verify(qProfile.Quests.Day == baseDay, "qProfile.Quests.Day matches current UTC day")
+	verify(#qProfile.Quests.List == 3, string.format("Generated exactly 3 daily quests (got %d)", #qProfile.Quests.List))
+
+	-- Check that 3 quests are distinct
+	local qIds: { [string]: boolean } = {}
+	local distinct = true
+	for _, q in ipairs(qProfile.Quests.List) do
+		if qIds[q.Id] then
+			distinct = false
+		end
+		qIds[q.Id] = true
+	end
+	verify(distinct == true, "All 3 daily quests are distinct")
+
+	-- Rollover to next day resets quests
+	QuestService.SetTimeOverride((baseDay + 1) * 86400 + 1000)
+	QuestService.EnsureProfileQuests(qProfile, testUserId)
+	verify(qProfile.Quests.Day == baseDay + 1, "Next UTC day updates qProfile.Quests.Day")
+	verify(#qProfile.Quests.List == 3, "New day generates 3 new daily quests")
+
+	-- Test Progress Recording and Claiming
+	local targetQuest = qProfile.Quests.List[1]
+	local qDef = nil
+	for _, def in ipairs(QuestsConfig.Pool) do
+		if def.Id == targetQuest.Id then
+			qDef = def
+			break
+		end
+	end
+	verify(qDef ~= nil, "Found matching QuestDefinition for quest " .. targetQuest.Id)
+
+	-- Try claiming unfinished quest
+	local earlyClaim = QuestService.ClaimQuestForProfile(qProfile, testUserId, targetQuest.Id)
+	verify(earlyClaim.Success == false and earlyClaim.ErrorReason == "TargetNotReached", "Claiming incomplete quest fails with TargetNotReached")
+
+	-- Advance progress to completion
+	QuestService.RecordProgressForProfile(qProfile, testUserId, qDef.EventType, qDef.Target)
+	verify(targetQuest.Progress >= qDef.Target, string.format("Progress updated to %d/%d", targetQuest.Progress, qDef.Target))
+
+	-- Claim completed quest
+	local startCoins = qProfile.Coins
+	local successClaim = QuestService.ClaimQuestForProfile(qProfile, testUserId, targetQuest.Id)
+	verify(successClaim.Success == true, "Claiming completed quest succeeds")
+	verify(targetQuest.Claimed == true, "Quest entry marked Claimed == true")
+	if (qDef.RewardCoins or 0) > 0 then
+		verify(qProfile.Coins == startCoins + qDef.RewardCoins, string.format("Coins rewarded correctly (+%d)", qDef.RewardCoins))
+	end
+	if qDef.RewardEggId then
+		verify(#qProfile.EggBag > 0, "Egg bag received reward egg: " .. tostring(qDef.RewardEggId))
+	end
+
+	-- Second claim attempt fails (anti-double claim)
+	local doubleClaim = QuestService.ClaimQuestForProfile(qProfile, testUserId, targetQuest.Id)
+	verify(doubleClaim.Success == false and doubleClaim.ErrorReason == "AlreadyClaimed", "Second claim attempt blocked with AlreadyClaimed")
+
+	-- Part 3: Login Streak (7-Day Progressive)
+	local sProfile = DataService.CreateDefaultProfile()
+	local day1Time = baseDay * 86400 + 2000
+	QuestService.SetTimeOverride(day1Time)
+
+	-- First time status
+	local streak1 = QuestService.GetStreakStatus(sProfile)
+	verify(streak1.CanClaim == true, "Day 1: CanClaim is true for new player")
+	verify(streak1.TodayStreakDay == 1, "Day 1: TodayStreakDay is 1")
+
+	-- Claim Day 1
+	local claimD1 = QuestService.ClaimStreakForProfile(sProfile)
+	verify(claimD1.Success == true and claimD1.Day == 1, "Claim Day 1 succeeds")
+	verify(claimD1.RewardCoins == 100, "Day 1 reward is 100 Coins")
+	verify(sProfile.Streak.Day == 1 and sProfile.Streak.LastClaim == baseDay, "Profile streak recorded Day 1 and LastClaim")
+
+	-- Re-claim on same day fails
+	local doubleClaimD1 = QuestService.ClaimStreakForProfile(sProfile)
+	verify(doubleClaimD1.Success == false and doubleClaimD1.ErrorReason == "AlreadyClaimedToday", "Re-claiming streak on same day blocked")
+
+	-- Consecutive Day 2 (+1 day)
+	QuestService.SetTimeOverride((baseDay + 1) * 86400 + 2000)
+	local streak2 = QuestService.GetStreakStatus(sProfile)
+	verify(streak2.CanClaim == true, "Day 2: CanClaim is true on consecutive day")
+	verify(streak2.TodayStreakDay == 2, "Day 2: TodayStreakDay advanced to 2")
+	local claimD2 = QuestService.ClaimStreakForProfile(sProfile)
+	verify(claimD2.Success == true and claimD2.Day == 2, "Claim Day 2 succeeds")
+	verify(claimD2.RewardCoins == 200 and claimD2.RewardEggId == "CommonEgg", "Day 2 reward is 200 Coins + Common Egg")
+
+	-- Missed a day: jump from Day 2 to Day 4 (+2 days skipped)
+	QuestService.SetTimeOverride((baseDay + 3) * 86400 + 2000)
+	local streakBroken = QuestService.GetStreakStatus(sProfile)
+	verify(streakBroken.CanClaim == true, "CanClaim is true after missed day")
+	verify(streakBroken.StreakBroken == true, "StreakBroken is true after skipping a day")
+	verify(streakBroken.TodayStreakDay == 1, "Streak resets back to Day 1 after skipping a day")
+
+	-- Advance consecutive days from 1 through 7
+	local sLoopProfile = DataService.CreateDefaultProfile()
+	for d = 1, 7 do
+		QuestService.SetTimeOverride((baseDay + d) * 86400 + 2000)
+		local st = QuestService.GetStreakStatus(sLoopProfile)
+		verify(st.CanClaim == true and st.TodayStreakDay == d, string.format("Streak consecutive progression: Day %d reachable", d))
+		local res = QuestService.ClaimStreakForProfile(sLoopProfile)
+		verify(res.Success == true and res.Day == d, string.format("Claimed Day %d successfully", d))
+	end
+	-- Day 7 rewards check: 1500 coins and RareEgg
+	local d7Reward = QuestsConfig.StreakRewards[7]
+	verify(d7Reward.RewardCoins == 1500 and d7Reward.RewardEggId == "RareEgg", "Day 7 streak reward is 1500 Coins + Rare Egg")
+
+	-- Cleanup override
+	QuestService.SetTimeOverride(nil)
+
+	print(string.format("[Step12Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -1775,4 +1997,5 @@ task.spawn(function()
 	runStep9Verification()
 	runStep10Verification()
 	runStep11Verification()
+	runStep12Verification()
 end)

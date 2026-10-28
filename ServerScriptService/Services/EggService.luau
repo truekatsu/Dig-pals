@@ -467,6 +467,16 @@ function EggService.Start()
 		if mutated and result.Success then
 			DataService.SavePlayer(player)
 			ShovelInventoryService.SendStateSync(player)
+
+			local IndexService = require(script.Parent:WaitForChild("IndexService"))
+			local QuestService = require(script.Parent:WaitForChild("QuestService"))
+			if result.Species then
+				local profile = PlayerState.Get(player)
+				if profile then
+					IndexService.RegisterPetDiscovery(player, profile, result.Species)
+				end
+			end
+			QuestService.RecordProgress(player, "EggHatched", 1)
 		end
 		return result
 	end)

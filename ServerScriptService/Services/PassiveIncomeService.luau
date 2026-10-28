@@ -51,6 +51,12 @@ function PassiveIncomeService.CalculatePlayerIncome(profile: Types.PlayerProfile
 		end
 	end
 
+	local IndexService = require(script.Parent:WaitForChild("IndexService"))
+	local petBonus = IndexService.ComputePetIndexIncomeBonus(profile)
+	if petBonus > 0 then
+		totalIncome = math.floor(totalIncome * (1 + petBonus))
+	end
+
 	return totalIncome
 end
 
@@ -235,6 +241,9 @@ function PassiveIncomeService.Start()
 
 			-- Sync updated state
 			ShovelInventoryService.SendStateSync(player)
+
+			local QuestService = require(script.Parent:WaitForChild("QuestService"))
+			QuestService.RecordProgress(player, "PetLeveledUp", 1)
 
 			print(
 				string.format(

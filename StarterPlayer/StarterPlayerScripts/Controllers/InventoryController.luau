@@ -758,6 +758,18 @@ function InventoryController.RegisterSideCategory(spec: SideCategorySpec): TextB
 		img.BackgroundTransparency = 1
 		img.Image = spec.IconImage
 		img.Parent = btn
+	elseif (spec :: any).IconText then
+		local iconLbl = Instance.new("TextLabel")
+		iconLbl.Name = "IconText"
+		iconLbl.AnchorPoint = Vector2.new(0.5, 0)
+		iconLbl.Position = UDim2.new(0.5, 0, 0, 8)
+		iconLbl.Size = UDim2.fromOffset(48, 30)
+		iconLbl.BackgroundTransparency = 1
+		iconLbl.Font = Enum.Font.GothamBlack
+		iconLbl.TextSize = 14
+		iconLbl.TextColor3 = Color3.fromRGB(255, 215, 80)
+		iconLbl.Text = tostring((spec :: any).IconText)
+		iconLbl.Parent = btn
 	end
 
 	local lbl = Instance.new("TextLabel")
@@ -933,7 +945,7 @@ local function buildInventoryGui()
 	sideFrame.Name = "SideCategories"
 	sideFrame.AnchorPoint = Vector2.new(0, 0.5)
 	sideFrame.Position = UDim2.new(0, 14, 0.5, 0)
-	sideFrame.Size = UDim2.fromOffset(70, 240)
+	sideFrame.Size = UDim2.fromOffset(70, 420)
 	sideFrame.BackgroundTransparency = 1
 	sideFrame.ZIndex = 9
 	sideFrame.Parent = gui

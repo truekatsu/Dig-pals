@@ -685,10 +685,21 @@ function SharedMoundService.DistributeRewards(
 					for _, eggDrop in summary.EggDrops do
 						InventoryService.AddDropToProfile(mutableProfile, eggDrop)
 					end
+					local IndexService = require(script.Parent:WaitForChild("IndexService"))
 					for _, itemDrop in summary.ItemDrops do
 						InventoryService.AddDropToProfile(mutableProfile, itemDrop)
+						IndexService.RegisterItemDiscovery(player, mutableProfile, itemDrop.Id)
 					end
 				end)
+
+				local QuestService = require(script.Parent:WaitForChild("QuestService"))
+				QuestService.RecordProgress(player, "MoundCleared", 1)
+				QuestService.RecordProgress(player, "MediumOrLargeMoundCleared", 1)
+				for _, itemDrop in summary.ItemDrops do
+					if itemDrop.Rarity == "Rare" or itemDrop.Rarity == "Epic" or itemDrop.Rarity == "Legendary" then
+						QuestService.RecordProgress(player, "RareOrHigherItemFound", 1)
+					end
+				end
 
 				for _, shovelId in summary.SpecialShovelsWon do
 					ShovelInventoryService.GrantShovel(player, shovelId)
