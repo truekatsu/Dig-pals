@@ -41,7 +41,7 @@ local stepInstructions = {
 	},
 	[3] = {
 		Badge = "LANGKAH 3 / 5",
-		Text = "Pergi ke Base kamu (tekan tombol BASE di atas) & taruh Telur Starter di inkubator!",
+		Text = "Pergi ke Base kamu (tombol KE BASE di atas) & taruh Telur Starter (tekan Telur di kiri)!",
 		TargetName = "BaseTopbarButton",
 	},
 	[4] = {

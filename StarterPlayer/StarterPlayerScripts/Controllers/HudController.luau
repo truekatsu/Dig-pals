@@ -485,13 +485,15 @@ local function buildHudGui()
 	barFillCorner.CornerRadius = UDim.new(1, 0)
 	barFillCorner.Parent = barFill
 
-	-- 3. Egg Bag Pill
-	local eggCard = Instance.new("Frame")
+	-- 3. Egg Bag Pill (Click to open Incubator)
+	local eggCard = Instance.new("TextButton")
 	eggCard.Name = "EggPill"
 	eggCard.Size = UDim2.fromOffset(146, 30)
 	eggCard.BackgroundColor3 = Color3.fromRGB(24, 28, 38)
 	eggCard.BackgroundTransparency = 0.14
 	eggCard.BorderSizePixel = 0
+	eggCard.Text = ""
+	eggCard.AutoButtonColor = true
 	eggCard.LayoutOrder = 3
 	eggCard.Parent = cluster
 
@@ -516,6 +518,15 @@ local function buildHudGui()
 	eggLbl.Text = "Telur 0/5"
 	eggLbl.Parent = eggCard
 	eggTextLabel = eggLbl
+
+	eggCard.Activated:Connect(function()
+		local controllers = script.Parent
+		local baseCtrl = controllers and controllers:FindFirstChild("BaseController")
+		if baseCtrl then
+			local BaseController = require(baseCtrl)
+			BaseController.OpenIncubatorModal(1)
+		end
+	end)
 
 	-- Top-center Drop Notification Feed
 	local dropContainer = Instance.new("Frame")

@@ -472,96 +472,11 @@ local function attachMerchantPrompt(
 end
 
 local function ensureBasePlotMerchantKiosk(plotModel: Instance, plotIndex: number)
-	local groundName = string.format("Plot%d_Ground", plotIndex)
-	local ground = plotModel:FindFirstChild(groundName)
-	if not ground or not ground:IsA("BasePart") then
-		return
-	end
-
+	-- Base Merchant removed per user request; clean up any existing kiosk in plot
 	local existingKiosk = plotModel:FindFirstChild("BaseMerchant")
-	local kioskModel: Model
-	local chestBase: BasePart
-
-	if existingKiosk and existingKiosk:IsA("Model") then
-		kioskModel = existingKiosk
-		local found = kioskModel:FindFirstChild("MerchantChest")
-		if found and found:IsA("BasePart") then
-			chestBase = found
-		else
-			existingKiosk:Destroy()
-			return ensureBasePlotMerchantKiosk(plotModel, plotIndex)
-		end
-	else
-		if existingKiosk then
-			existingKiosk:Destroy()
-		end
-
-		-- Place compact kiosk inside front-corner of plot, leaving plot center clear for Step 8
-		local frontDir = ground.CFrame.RightVector
-		local sideDir = ground.CFrame.LookVector
-		local groundTopY = ground.Position.Y + (ground.Size.Y * 0.5)
-		local kioskPos = Vector3.new(ground.Position.X, groundTopY, ground.Position.Z)
-			+ (frontDir * 13.5)
-			+ (sideDir * 13.5)
-		local lookTarget = Vector3.new(ground.Position.X, groundTopY, ground.Position.Z) + (frontDir * 8.0)
-		local baseCf = CFrame.lookAt(kioskPos, lookTarget)
-
-		kioskModel = Instance.new("Model")
-		kioskModel.Name = "BaseMerchant"
-
-		local platform = Instance.new("Part")
-		platform.Name = "Pedestal"
-		platform.Size = Vector3.new(4.2, 0.4, 3.2)
-		platform.Color = Color3.fromRGB(122, 118, 128)
-		platform.Material = Enum.Material.Cobblestone
-		platform.Anchored = true
-		platform.CanCollide = true
-		platform.CFrame = baseCf * CFrame.new(0, 0.2, 0)
-		platform.Parent = kioskModel
-
-		local body = Instance.new("Part")
-		body.Name = "MerchantChest"
-		body.Size = Vector3.new(3.2, 2.1, 2.2)
-		body.Color = Color3.fromRGB(132, 84, 46)
-		body.Material = Enum.Material.WoodPlanks
-		body.Anchored = true
-		body.CanCollide = true
-		body.CFrame = baseCf * CFrame.new(0, 1.45, 0)
-		body.Parent = kioskModel
-		chestBase = body
-
-		local trim = Instance.new("Part")
-		trim.Name = "GoldTrim"
-		trim.Size = Vector3.new(3.32, 0.35, 2.32)
-		trim.Color = Color3.fromRGB(238, 188, 58)
-		trim.Material = Enum.Material.SmoothPlastic
-		trim.Anchored = true
-		trim.CanCollide = false
-		trim.CFrame = baseCf * CFrame.new(0, 2.35, 0)
-		trim.Parent = kioskModel
-
-		local clasp = Instance.new("Part")
-		clasp.Name = "CoinClasp"
-		clasp.Size = Vector3.new(0.65, 0.75, 0.2)
-		clasp.Color = Color3.fromRGB(252, 208, 72)
-		clasp.Material = Enum.Material.Neon
-		clasp.Anchored = true
-		clasp.CanCollide = false
-		clasp.CFrame = baseCf * CFrame.new(0, 1.95, -1.12)
-		clasp.Parent = kioskModel
-
-		kioskModel.PrimaryPart = body
-		kioskModel.Parent = plotModel
+	if existingKiosk then
+		existingKiosk:Destroy()
 	end
-
-	createMerchantBillboard(chestBase, "BASE MERCHANT", "Jual Item & Upgrade Tas", Vector3.new(0, 2.8, 0))
-	attachMerchantPrompt(
-		chestBase,
-		string.format("BasePlot%d", plotIndex),
-		"Base Merchant",
-		"Jual Item & Upgrade Tas",
-		Vector3.new(0, 0.8, 0)
-	)
 end
 
 function InventoryService.EnsureMerchantWorldPrompts()
@@ -585,7 +500,7 @@ function InventoryService.EnsureMerchantWorldPrompts()
 		)
 	end
 
-	-- 2. Base Merchants inside Plot1..Plot6 (Workspace.BasePlots)
+	-- 2. Clean up any Base Merchants inside Plot1..Plot6 (Workspace.BasePlots)
 	local basePlots = workspace:FindFirstChild("BasePlots")
 	if basePlots then
 		for plotIndex = 1, 6 do

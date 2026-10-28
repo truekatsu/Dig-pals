@@ -76,7 +76,7 @@ local function refreshVisuals()
 	else
 		-- When at Hub (or elsewhere), the button offers teleport to BASE
 		titleLabel.Text = "KE BASE"
-		subLabel.Text = "Inkubator & Pet"
+		subLabel.Text = "Plot Pribadi"
 		subLabel.TextColor3 = COLORS.BaseSub
 		iconTextLabel.Text = "🌀"
 		iconBadge.BackgroundColor3 = COLORS.BaseBadge

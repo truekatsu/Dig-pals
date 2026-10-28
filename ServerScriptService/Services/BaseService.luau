@@ -118,249 +118,38 @@ function BaseService.UpgradeBaseInProfile(profile: Types.PlayerProfile): Upgrade
 	}
 end
 
--- Update sign billboard on plot
+-- Clean up sign billboard on plot (base text removed per user request)
 local function updatePlotSign(plotFolder: Folder, ownerPlayer: Player?, baseLevel: number?)
 	local signPart = BaseService.GetPlotSignBoard(plotFolder)
-	if not signPart then
-		return
+	if signPart then
+		local existing = signPart:FindFirstChild("PlotSignGui")
+		if existing then
+			existing:Destroy()
+		end
 	end
 
-	local existing = signPart:FindFirstChild("PlotSignGui")
-	if existing then
-		existing:Destroy()
+	local plotName = plotFolder.Name
+	local textPart = plotFolder:FindFirstChild("Text_" .. plotName)
+	if textPart then
+		local signGui = textPart:FindFirstChild("SignGui")
+		if signGui then
+			signGui:Destroy()
+		end
 	end
-
-	local bb = Instance.new("BillboardGui")
-	bb.Name = "PlotSignGui"
-	bb.Adornee = signPart
-	bb.Size = UDim2.fromOffset(220, 54)
-	bb.StudsOffset = Vector3.new(0, 3.2, 0)
-	bb.AlwaysOnTop = false
-	bb.MaxDistance = 80
-	bb.Parent = signPart
-
-	local bg = Instance.new("Frame")
-	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(24, 30, 44)
-	bg.BackgroundTransparency = 0.12
-	bg.BorderSizePixel = 0
-	bg.Parent = bb
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = bg
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = if ownerPlayer then Color3.fromRGB(96, 212, 255) else Color3.fromRGB(118, 132, 162)
-	stroke.Thickness = 1.8
-	stroke.Parent = bg
-
-	local title = Instance.new("TextLabel")
-	title.Name = "OwnerTitle"
-	title.Position = UDim2.fromOffset(6, 4)
-	title.Size = UDim2.new(1, -12, 0, 24)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 14
-	title.TextColor3 = if ownerPlayer then Color3.fromRGB(255, 224, 96) else Color3.fromRGB(185, 195, 215)
-	title.Text = if ownerPlayer then string.format("%s's Base", ownerPlayer.DisplayName) else "Base Plot Kosong"
-	title.Parent = bg
-
-	local sub = Instance.new("TextLabel")
-	sub.Name = "LevelSub"
-	sub.Position = UDim2.fromOffset(6, 26)
-	sub.Size = UDim2.new(1, -12, 0, 20)
-	sub.BackgroundTransparency = 1
-	sub.Font = Enum.Font.GothamBold
-	sub.TextSize = 11
-	sub.TextColor3 = Color3.fromRGB(120, 235, 165)
-	local lv = baseLevel or 1
-	local cfg = BaseConfig.Levels[lv] or BaseConfig.Levels[1]
-	sub.Text = if ownerPlayer
-		then string.format("Level %d | %d Inkubator | %d Pet", lv, cfg.IncubatorSlots, cfg.PetSlots)
-		else "Tersedia untuk pemain"
-	sub.Parent = bg
 end
 
--- Build or refresh incubator station models on the assigned plot
+-- Clean up incubator station models and return pad on the plot (removed per user request)
 local function refreshPlotIncubatorStation(plotFolder: Folder, player: Player, profile: Types.PlayerProfile)
-	local ground = BaseService.GetPlotGround(plotFolder)
-	if not ground then
-		return
-	end
-
 	local containerName = "IncubatorStationContainer"
 	local existing = plotFolder:FindFirstChild(containerName)
 	if existing then
 		existing:Destroy()
 	end
 
-	local station = Instance.new("Model")
-	station.Name = containerName
-	station.Parent = plotFolder
-
-	local maxSlots = EggService.GetMaxIncubatorSlots(profile.BaseLevel)
-	local groundPos = ground.Position
-
-	-- Position the 1..5 incubator pods in an orderly arc/row inside the plot
-	local spacing = 6.2
-	local startX = -((maxSlots - 1) * spacing * 0.5)
-
-	for slotIndex = 1, maxSlots do
-		local pod = Instance.new("Model")
-		pod.Name = "IncubatorPod_" .. slotIndex
-		pod.Parent = station
-
-		local localOffset = Vector3.new(startX + (slotIndex - 1) * spacing, 0.45, -7.5)
-		local worldPos = groundPos + localOffset
-
-		local pedestal = Instance.new("Part")
-		pedestal.Name = "Pedestal"
-		pedestal.Shape = Enum.PartType.Cylinder
-		pedestal.Size = Vector3.new(0.9, 3.2, 3.2)
-		pedestal.CFrame = CFrame.new(worldPos) * CFrame.Angles(0, 0, math.rad(90))
-		pedestal.Color = Color3.fromRGB(44, 52, 70)
-		pedestal.Material = Enum.Material.SmoothPlastic
-		pedestal.Anchored = true
-		pedestal.CanCollide = true
-		pedestal.Parent = pod
-		pod.PrimaryPart = pedestal
-
-		local glowRing = Instance.new("Part")
-		glowRing.Name = "GlowRing"
-		glowRing.Shape = Enum.PartType.Cylinder
-		glowRing.Size = Vector3.new(0.2, 3.4, 3.4)
-		glowRing.CFrame = CFrame.new(worldPos + Vector3.new(0, 0.45, 0)) * CFrame.Angles(0, 0, math.rad(90))
-		glowRing.Material = Enum.Material.Neon
-		glowRing.Anchored = true
-		glowRing.CanCollide = false
-		glowRing.Parent = pod
-
-		local glass = Instance.new("Part")
-		glass.Name = "GlassDome"
-		glass.Shape = Enum.PartType.Cylinder
-		glass.Size = Vector3.new(2.4, 2.6, 2.6)
-		glass.CFrame = CFrame.new(worldPos + Vector3.new(0, 1.7, 0)) * CFrame.Angles(0, 0, math.rad(90))
-		glass.Color = Color3.fromRGB(180, 225, 255)
-		glass.Transparency = 0.65
-		glass.Material = Enum.Material.Glass
-		glass.Anchored = true
-		glass.CanCollide = false
-		glass.Parent = pod
-
-		local eggEntry = profile.Incubators[slotIndex]
-		local isOccupied = (eggEntry ~= nil)
-
-		glowRing.Color = if isOccupied
-			then (RarityConfig.ById[eggEntry.Rarity] and RarityConfig.ById[eggEntry.Rarity].Color or Color3.fromRGB(96, 212, 255))
-			else Color3.fromRGB(72, 88, 118)
-
-		-- Egg placeholder model inside glass dome
-		if isOccupied and eggEntry then
-			local eggPart = Instance.new("Part")
-			eggPart.Name = "IncubatingEgg"
-			eggPart.Shape = Enum.PartType.Ball
-			eggPart.Size = Vector3.new(1.3, 1.7, 1.3)
-			eggPart.CFrame = CFrame.new(worldPos + Vector3.new(0, 1.6, 0))
-			local rarityCfg = RarityConfig.ById[eggEntry.Rarity]
-			eggPart.Color = if rarityCfg then rarityCfg.Color else Color3.fromRGB(240, 240, 240)
-			eggPart.Material = Enum.Material.SmoothPlastic
-			eggPart.Anchored = true
-			eggPart.CanCollide = false
-			eggPart.Parent = pod
-		end
-
-		-- Billboard status & timer
-		local bb = Instance.new("BillboardGui")
-		bb.Name = "StatusBillboard"
-		bb.Adornee = pedestal
-		bb.Size = UDim2.fromOffset(150, 48)
-		bb.StudsOffset = Vector3.new(0, 3.8, 0)
-		bb.AlwaysOnTop = false
-		bb.MaxDistance = 50
-		bb.Parent = pod
-
-		local statusBg = Instance.new("Frame")
-		statusBg.Size = UDim2.fromScale(1, 1)
-		statusBg.BackgroundColor3 = Color3.fromRGB(20, 26, 38)
-		statusBg.BackgroundTransparency = 0.15
-		statusBg.BorderSizePixel = 0
-		statusBg.Parent = bb
-
-		local statusCorner = Instance.new("UICorner")
-		statusCorner.CornerRadius = UDim.new(0, 8)
-		statusCorner.Parent = statusBg
-
-		local slotLabel = Instance.new("TextLabel")
-		slotLabel.Name = "SlotLabel"
-		slotLabel.Position = UDim2.fromOffset(4, 3)
-		slotLabel.Size = UDim2.new(1, -8, 0, 18)
-		slotLabel.BackgroundTransparency = 1
-		slotLabel.Font = Enum.Font.GothamBlack
-		slotLabel.TextSize = 12
-		slotLabel.TextColor3 = Color3.fromRGB(255, 220, 96)
-		slotLabel.Text = string.format("Inkubator #%d", slotIndex)
-		slotLabel.Parent = statusBg
-
-		local timerLabel = Instance.new("TextLabel")
-		timerLabel.Name = "TimerLabel"
-		timerLabel.Position = UDim2.fromOffset(4, 22)
-		timerLabel.Size = UDim2.new(1, -8, 0, 18)
-		timerLabel.BackgroundTransparency = 1
-		timerLabel.Font = Enum.Font.GothamBold
-		timerLabel.TextSize = 11
-		timerLabel.TextColor3 = if isOccupied then Color3.fromRGB(112, 238, 154) else Color3.fromRGB(160, 172, 196)
-		timerLabel.Text = if isOccupied
-			then (if os.time() >= eggEntry.ReadyAt then "SIAP DITETASKAN!" else "Sedang Inkubasi...")
-			else "Kosong"
-		timerLabel.Parent = statusBg
-
-		-- ProximityPrompt for interaction
-		local prompt = Instance.new("ProximityPrompt")
-		prompt.Name = "IncubatorPrompt"
-		prompt.ObjectText = string.format("Inkubator #%d", slotIndex)
-		prompt.ActionText = if isOccupied
-			then (if os.time() >= eggEntry.ReadyAt then "Tetaskan Pet" else "Kelola Inkubasi")
-			else "Taruh Telur"
-		prompt.KeyboardKeyCode = Enum.KeyCode.E
-		prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-		prompt.HoldDuration = 0
-		prompt.MaxActivationDistance = 9
-		prompt.RequiresLineOfSight = false
-		prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
-		prompt.Parent = pedestal
-
-		prompt:SetAttribute("DigPalsIncubatorSlot", slotIndex)
-		prompt:SetAttribute("DigPalsPlotName", plotFolder.Name)
+	local returnPad = plotFolder:FindFirstChild("ReturnToHubPad")
+	if returnPad then
+		returnPad:Destroy()
 	end
-
-	-- Return pad to Hub
-	local returnPad = Instance.new("Part")
-	returnPad.Name = "ReturnToHubPad"
-	returnPad.Shape = Enum.PartType.Cylinder
-	returnPad.Size = Vector3.new(0.35, 5.0, 5.0)
-	returnPad.CFrame = CFrame.new(groundPos + Vector3.new(0, 0.2, 14.5)) * CFrame.Angles(0, 0, math.rad(90))
-	returnPad.Color = Color3.fromRGB(46, 178, 106)
-	returnPad.Material = Enum.Material.Neon
-	returnPad.Anchored = true
-	returnPad.CanCollide = false
-	returnPad.Parent = station
-
-	local returnPrompt = Instance.new("ProximityPrompt")
-	returnPrompt.Name = "ReturnPrompt"
-	returnPrompt.ObjectText = "Teleport Pad"
-	returnPrompt.ActionText = "Kembali ke Hub"
-	returnPrompt.KeyboardKeyCode = Enum.KeyCode.E
-	returnPrompt.HoldDuration = 0
-	returnPrompt.MaxActivationDistance = 9
-	returnPrompt.RequiresLineOfSight = false
-	returnPrompt.Parent = returnPad
-
-	returnPrompt.Triggered:Connect(function(triggeringPlayer: Player)
-		if triggeringPlayer == player then
-			BaseService.TeleportPlayerToHub(triggeringPlayer)
-		end
-	end)
 end
 
 -- Teleport player to their assigned base plot
@@ -472,6 +261,11 @@ function BaseService.FreePlot(player: Player)
 		local station = plotFolder:FindFirstChild("IncubatorStationContainer")
 		if station then
 			station:Destroy()
+		end
+
+		local returnPad = plotFolder:FindFirstChild("ReturnToHubPad")
+		if returnPad then
+			returnPad:Destroy()
 		end
 	end
 
