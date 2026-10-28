@@ -41,8 +41,8 @@ local stepInstructions = {
 	},
 	[3] = {
 		Badge = "LANGKAH 3 / 5",
-		Text = "Pergi ke Base kamu (lewat Teleport Pad) & taruh Telur Starter di inkubator!",
-		TargetName = "TeleportPad",
+		Text = "Pergi ke Base kamu (tekan tombol BASE di atas) & taruh Telur Starter di inkubator!",
+		TargetName = "BaseTopbarButton",
 	},
 	[4] = {
 		Badge = "LANGKAH 4 / 5",
@@ -92,12 +92,15 @@ local function findCurrentTargetPosition(): Vector3?
 		end
 		return Vector3.new(-20, 7, -86.5)
 	elseif currentStep == 3 then
-		-- HubBaseTeleportPad
-		local pad = plain:FindFirstChild("HubBaseTeleportPad") :: BasePart?
-		if pad then
-			return pad.Position + Vector3.new(0, 4, 0)
+		-- Assigned Base Plot
+		local plotName = LocalPlayer:GetAttribute("AssignedPlot") or "Plot1"
+		local basePlots = workspace:FindFirstChild("BasePlots")
+		local plotFolder = basePlots and basePlots:FindFirstChild(plotName)
+		local ground = plotFolder and plotFolder:FindFirstChild(plotName .. "_Ground") :: BasePart?
+		if ground then
+			return ground.Position + Vector3.new(0, 5, 0)
 		end
-		return Vector3.new(0, 4, -28)
+		return Vector3.new(-108, 5, 138)
 	elseif currentStep == 5 then
 		-- Shovel Shop / Hub Plaza area
 		return Vector3.new(0, 6, 0)

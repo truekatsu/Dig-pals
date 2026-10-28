@@ -17,6 +17,7 @@ local LeaderboardController = require(Controllers:WaitForChild("LeaderboardContr
 local BaseController = require(Controllers:WaitForChild("BaseController"))
 local MerchantController = require(Controllers:WaitForChild("MerchantController"))
 local OfflineIncomeController = require(Controllers:WaitForChild("OfflineIncomeController"))
+local TeleportController = require(Controllers:WaitForChild("TeleportController"))
 
 local InputController = {}
 local started = false
@@ -156,6 +157,8 @@ local function handleInputBegan(input: InputObject, gameProcessed: boolean)
 		toggleLeaderboard()
 	elseif key == Enum.KeyCode.S then
 		toggleShovelShop()
+	elseif key == Enum.KeyCode.T then
+		TeleportController.Toggle()
 	end
 
 	-- Gamepad Buttons

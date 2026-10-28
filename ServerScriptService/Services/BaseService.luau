@@ -388,6 +388,7 @@ function BaseService.TeleportPlayerToBase(player: Player): boolean
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if hrp and hrp:IsA("BasePart") then
 		hrp.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(180), 0)
+		player:SetAttribute("CurrentZone", "Base")
 		return true
 	end
 	return false
@@ -399,6 +400,7 @@ function BaseService.TeleportPlayerToHub(player: Player): boolean
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if hrp and hrp:IsA("BasePart") then
 		hrp.CFrame = CFrame.new(0, 3.5, 0)
+		player:SetAttribute("CurrentZone", "Hub")
 		return true
 	end
 	return false
@@ -509,96 +511,17 @@ function BaseService.UpgradeBase(player: Player): UpgradeBaseResult
 	return result
 end
 
--- Setup Hub Teleport Pad to player's Base
+-- Clean up any legacy Hub Teleport Pad (teleport is now handled via Topbar UI)
 function BaseService.EnsureHubTeleportPad()
-	if hubTeleportPad and hubTeleportPad.Parent ~= nil then
-		return hubTeleportPad
-	end
-
 	local plain = workspace:FindFirstChild("Plain")
 	local parentContainer = plain or workspace
 
 	local existing = parentContainer:FindFirstChild("HubBaseTeleportPad")
-	if existing and existing:IsA("BasePart") then
-		hubTeleportPad = existing
-		return existing
+	if existing then
+		existing:Destroy()
 	end
-
-	local pad = Instance.new("Part")
-	pad.Name = "HubBaseTeleportPad"
-	pad.Shape = Enum.PartType.Cylinder
-	pad.Size = Vector3.new(0.4, 6.0, 6.0)
-	pad.CFrame = CFrame.new(0, 0.25, -28) * CFrame.Angles(0, 0, math.rad(90))
-	pad.Color = Color3.fromRGB(72, 196, 248)
-	pad.Material = Enum.Material.Neon
-	pad.Anchored = true
-	pad.CanCollide = false
-	pad.Parent = parentContainer
-	hubTeleportPad = pad
-
-	local bb = Instance.new("BillboardGui")
-	bb.Name = "PadSign"
-	bb.Adornee = pad
-	bb.Size = UDim2.fromOffset(170, 46)
-	bb.StudsOffset = Vector3.new(0, 3.2, 0)
-	bb.AlwaysOnTop = false
-	bb.MaxDistance = 60
-	bb.Parent = pad
-
-	local bg = Instance.new("Frame")
-	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(20, 28, 42)
-	bg.BackgroundTransparency = 0.15
-	bg.BorderSizePixel = 0
-	bg.Parent = bb
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 9)
-	corner.Parent = bg
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(96, 212, 255)
-	stroke.Thickness = 1.6
-	stroke.Parent = bg
-
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.Position = UDim2.fromOffset(4, 3)
-	title.Size = UDim2.new(1, -8, 0, 20)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 13
-	title.TextColor3 = Color3.fromRGB(108, 220, 255)
-	title.Text = "TELEPORT KE BASE"
-	title.Parent = bg
-
-	local sub = Instance.new("TextLabel")
-	sub.Name = "Sub"
-	sub.Position = UDim2.fromOffset(4, 23)
-	sub.Size = UDim2.new(1, -8, 0, 18)
-	sub.BackgroundTransparency = 1
-	sub.Font = Enum.Font.GothamBold
-	sub.TextSize = 11
-	sub.TextColor3 = Color3.fromRGB(220, 235, 255)
-	sub.Text = "Inkubator & Pet Pribadi"
-	sub.Parent = bg
-
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.Name = "TeleportToBasePrompt"
-	prompt.ObjectText = "Base Pribadi"
-	prompt.ActionText = "Masuk ke Base"
-	prompt.KeyboardKeyCode = Enum.KeyCode.E
-	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 11
-	prompt.RequiresLineOfSight = false
-	prompt.Parent = pad
-
-	prompt.Triggered:Connect(function(player: Player)
-		BaseService.TeleportPlayerToBase(player)
-	end)
-
-	return pad
+	hubTeleportPad = nil
+	return nil
 end
 
 function BaseService.Start()
@@ -653,6 +576,10 @@ function BaseService.Start()
 
 	Remotes.OnServerEvent("TeleportToBase", function(player: Player)
 		BaseService.TeleportPlayerToBase(player)
+	end)
+
+	Remotes.OnServerEvent("TeleportToHub", function(player: Player)
+		BaseService.TeleportPlayerToHub(player)
 	end)
 
 	Remotes.OnServerInvoke("UpgradeBase", function(player: Player): UpgradeBaseResult

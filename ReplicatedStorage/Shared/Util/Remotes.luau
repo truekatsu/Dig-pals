@@ -30,6 +30,7 @@
 
 	-- Base & Incubators (Step 8)
 	TeleportToBase          | RemoteEvent    | Client -> Server| ()                                | 5
+	TeleportToHub           | RemoteEvent    | Client -> Server| ()                                | 5
 	UpgradeBase             | RemoteFunction | Client -> Server| ()                                | 5
 	PlaceEggInIncubator     | RemoteFunction | Client -> Server| (eggIndex: posInt, slotIndex: posInt) | 10
 	SpeedUpIncubator        | RemoteFunction | Client -> Server| (slotIndex: posInt)               | 5
@@ -273,6 +274,15 @@ local Specs: { [string]: RemoteSpec } = {
 		RateLimitPerSecond = 5,
 		Validators = {},
 		Description = "Client -> Server: Teleports the player to their assigned Base plot.",
+	},
+
+	TeleportToHub = {
+		Name = "TeleportToHub",
+		Kind = "RemoteEvent",
+		Direction = "ClientToServer",
+		RateLimitPerSecond = 5,
+		Validators = {},
+		Description = "Client -> Server: Teleports the player back to Hub Plaza.",
 	},
 	UpgradeBase = {
 		Name = "UpgradeBase",
