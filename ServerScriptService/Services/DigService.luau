@@ -128,6 +128,18 @@ function DigService.StartSession(
 		return false, "BagFull", nil
 	end
 
+	-- Inverted logic: Player must be holding/using their shovel to dig
+	if player and player.Parent == Players then
+		if not ShovelInventoryService.IsShovelHeld(player) then
+			Remotes.GetEvent("StrikeResult"):FireClient(player, {
+				Event = "Rejected",
+				MoundId = moundId,
+				Reason = "ShovelNotHeld",
+			})
+			return false, "ShovelNotHeld", nil
+		end
+	end
+
 	local session: StrikeSession = {
 		UserId = userId,
 		MoundId = moundId,
@@ -214,6 +226,14 @@ function DigService.ExecuteStrike(
 	end
 
 	local shovel = getEquippedShovelConfig(player, profileOverride)
+	if player and player.Parent == Players then
+		if not ShovelInventoryService.IsShovelHeld(player) then
+			return {
+				Success = false,
+				Reason = "ShovelNotHeld",
+			}
+		end
+	end
 	if session.LastStrikeTime > 0 and (serverNow - session.LastStrikeTime) < shovel.DigSpeed then
 		return {
 			Success = false,

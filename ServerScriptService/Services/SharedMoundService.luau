@@ -355,6 +355,7 @@ function SharedMoundService.StartSession(
 		return true, nil, existing
 	end
 
+	-- Step 6: Block starting a NEW mound when Item Bag is full
 	if player and InventoryService.IsPlayerBagFull(player) then
 		if player.Parent == Players then
 			Remotes.GetEvent("StrikeResult"):FireClient(player, {
@@ -364,6 +365,18 @@ function SharedMoundService.StartSession(
 			})
 		end
 		return false, "BagFull", nil
+	end
+
+	-- Inverted logic: Player must be holding/using their shovel to dig
+	if player and player.Parent == Players then
+		if not ShovelInventoryService.IsShovelHeld(player) then
+			Remotes.GetEvent("StrikeResult"):FireClient(player, {
+				Event = "Rejected",
+				MoundId = moundId,
+				Reason = "ShovelNotHeld",
+			})
+			return false, "ShovelNotHeld", nil
+		end
 	end
 
 	local session: SharedStrikeSession = {
@@ -444,6 +457,14 @@ function SharedMoundService.ExecuteStrike(
 	end
 
 	local shovel = getEquippedShovelConfig(player, profileOverride)
+	if player and player.Parent == Players then
+		if not ShovelInventoryService.IsShovelHeld(player) then
+			return {
+				Success = false,
+				Reason = "ShovelNotHeld",
+			}
+		end
+	end
 	if session.LastStrikeTime > 0 and (serverNow - session.LastStrikeTime) < shovel.DigSpeed then
 		return {
 			Success = false,

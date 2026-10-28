@@ -349,6 +349,13 @@ function ShovelInventoryService.SyncCharacterTool(player: Player)
 	player:SetAttribute("ShovelToolActive", findCharacterShovelTool(player) ~= nil)
 end
 
+function ShovelInventoryService.IsShovelHeld(player: Player?): boolean
+	if not player or player.Parent ~= Players then
+		return false
+	end
+	return findCharacterShovelTool(player) ~= nil
+end
+
 function ShovelInventoryService.SetToolActive(player: Player, active: boolean)
 	toolDesiredActiveByUserId[player.UserId] = active
 	ShovelInventoryService.SyncCharacterTool(player)

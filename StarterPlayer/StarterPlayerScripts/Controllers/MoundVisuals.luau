@@ -1,12 +1,17 @@
 --!strict
 -- Client-side visual controller for personal mounds, click selection, and HP billboards (Step 3 & Step 4)
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local AssetIds = require(Shared:WaitForChild("AssetIds"))
 local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"))
+
+local RAYCAST_DISTANCE = 500
+local LocalPlayer = Players.LocalPlayer
 
 export type MoundVisualPayload = {
 	Id: string,
@@ -38,6 +43,7 @@ local MoundVisuals = {}
 local activeVisuals: { [string]: MoundVisualEntry } = {}
 local clickCallbacks: { MoundClickedCallback } = {}
 local selectedMoundId: string? = nil
+local hoveredEntry: MoundVisualEntry? = nil
 local containerFolder: Folder? = nil
 local started = false
 
@@ -209,11 +215,8 @@ function MoundVisuals.SpawnMound(data: MoundVisualPayload)
 	highlight.Enabled = false
 	highlight.Parent = model
 
-	local clickDetector = Instance.new("ClickDetector")
-	clickDetector.Name = "MoundClickDetector"
-	clickDetector.MaxActivationDistance = MoundsConfig.DigRangeStuds + 16
-	clickDetector.Parent = basePart
-
+	-- NOTE: Roblox never forwards clicks to ClickDetectors while a Tool is held, so mound clicks are handled
+	-- by MoundVisuals.Start() via a character-ignoring cursor raycast (works with and without the shovel held).
 	model.PrimaryPart = basePart
 	local fillFrame, hpLabel = createBillboard(basePart, displayName, data.HP, data.MaxHP, data.IsShared == true)
 	model.Parent = getContainerFolder()
@@ -231,22 +234,68 @@ function MoundVisuals.SpawnMound(data: MoundVisualPayload)
 	}
 	activeVisuals[data.Id] = entry
 	refreshEntryHighlight(entry)
+end
 
-	clickDetector.MouseHoverEnter:Connect(function()
-		entry.IsHovered = true
-		refreshEntryHighlight(entry)
-	end)
-
-	clickDetector.MouseHoverLeave:Connect(function()
-		entry.IsHovered = false
-		refreshEntryHighlight(entry)
-	end)
-
-	clickDetector.MouseClick:Connect(function()
-		for _, cb in clickCallbacks do
-			task.spawn(cb, entry.Id, entry.Size, entry.PrimaryPart.Position)
+-- Raycasts from a screen position (same coordinate space as InputObject.Position / Mouse.X,Y) and returns the
+-- mound entry under the cursor. The local character (and its held Tool) plus pet visuals are ignored so the
+-- equipped shovel can never block or swallow the click.
+local function getMoundEntryAtScreenPoint(screenX: number, screenY: number): MoundVisualEntry?
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return nil
+	end
+	local ignore: { Instance } = {}
+	local character = Players.LocalPlayer.Character
+	if character then
+		table.insert(ignore, character)
+	end
+	for _, folderName in { "ClientPetVisuals", "ClientBasePetVisuals" } do
+		local folder = workspace:FindFirstChild(folderName)
+		if folder then
+			table.insert(ignore, folder)
 		end
-	end)
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+
+	local ray = camera:ScreenPointToRay(screenX, screenY)
+	local result = workspace:Raycast(ray.Origin, ray.Direction * RAYCAST_DISTANCE, params)
+	if not result then
+		return nil
+	end
+	local moundId = result.Instance:GetAttribute("MoundId")
+	if not moundId and result.Instance.Parent then
+		moundId = result.Instance.Parent:GetAttribute("MoundId")
+	end
+	if type(moundId) ~= "string" then
+		return nil
+	end
+	return activeVisuals[moundId]
+end
+
+function MoundVisuals.GetHoveredMound(): (string?, string?, Vector3?)
+	if hoveredEntry and activeVisuals[hoveredEntry.Id] == hoveredEntry then
+		return hoveredEntry.Id, hoveredEntry.Size, hoveredEntry.PrimaryPart.Position
+	end
+	return nil, nil, nil
+end
+
+local function setHoveredEntry(newEntry: MoundVisualEntry?)
+	if hoveredEntry == newEntry then
+		return
+	end
+	if hoveredEntry then
+		hoveredEntry.IsHovered = false
+		if activeVisuals[hoveredEntry.Id] == hoveredEntry then
+			refreshEntryHighlight(hoveredEntry)
+		end
+	end
+	hoveredEntry = newEntry
+	if hoveredEntry then
+		hoveredEntry.IsHovered = true
+		refreshEntryHighlight(hoveredEntry)
+	end
 end
 
 function MoundVisuals.UpdateMoundHP(moundId: string, currentHp: number, maxHp: number?)
@@ -296,6 +345,33 @@ function MoundVisuals.Start()
 	Remotes.GetEvent("MoundDespawned").OnClientEvent:Connect(function(moundId: string, _reason: string)
 		if type(moundId) == "string" then
 			MoundVisuals.RemoveMound(moundId)
+		end
+	end)
+
+	-- Raycast click detection that works seamlessly whether a shovel tool is held or not
+	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+		if gameProcessed then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			local entry = getMoundEntryAtScreenPoint(input.Position.X, input.Position.Y)
+			if entry then
+				for _, cb in clickCallbacks do
+					task.spawn(cb, entry.Id, entry.Size, entry.PrimaryPart.Position)
+				end
+			end
+		end
+	end)
+
+	-- Hover detection for desktop cursors
+	UserInputService.InputChanged:Connect(function(input: InputObject, gameProcessed: boolean)
+		if gameProcessed then
+			setHoveredEntry(nil)
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			local entry = getMoundEntryAtScreenPoint(input.Position.X, input.Position.Y)
+			setHoveredEntry(entry)
 		end
 	end)
 end

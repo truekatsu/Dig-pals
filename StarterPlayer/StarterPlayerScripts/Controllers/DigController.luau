@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Weighted = require(Shared:WaitForChild("Util"):WaitForChild("Weighted"))
@@ -52,6 +53,21 @@ local hintToastLabel: TextLabel? = nil
 
 local function isAnyModalOpen(): boolean
 	return InputController.IsAnyModalOpen()
+end
+
+local function isShovelHeld(): boolean
+	if LocalPlayer:GetAttribute("ShovelToolActive") == true then
+		return true
+	end
+	local character = LocalPlayer.Character
+	if character then
+		for _, child in character:GetChildren() do
+			if child:IsA("Tool") and child:GetAttribute("DigPalsShovelTool") == true then
+				return true
+			end
+		end
+	end
+	return false
 end
 
 local function getEquippedShovelCooldown(): number
@@ -245,6 +261,13 @@ function DigController.StartMinigameOnMound(moundId: string, moundSize: string, 
 	if isAnyModalOpen() then
 		return
 	end
+
+	-- Inverted logic: Shovel MUST be held to dig; cannot dig without shovel
+	if not isShovelHeld() then
+		showHintToast("Pegang sekop terlebih dahulu untuk menggali! [Tekan 1]")
+		return
+	end
+
 	local isShared = (moundSize == "Shared" or moundSize == "Rare" or MoundVisuals.IsSharedMound(moundId))
 	local allowedRange = if isShared
 		then (MoundsConfig.Shared.Scale.X * 0.5) + MoundsConfig.DigRangeStuds
@@ -298,6 +321,12 @@ function DigController.AttemptStrike()
 	if not activeMoundId or isAnyModalOpen() then
 		return
 	end
+
+	if not isShovelHeld() then
+		showHintToast("Pegang sekop terlebih dahulu untuk menggali! [Tekan 1]")
+		return
+	end
+
 	local serverNow = workspace:GetServerTimeNow()
 	if serverNow < nextAllowedStrikeTime then
 		return
@@ -564,11 +593,58 @@ function DigController.Start()
 			if payload.Reason == "BagFull" then
 				unbindMinigameControls()
 				showBagFullLockedState(tostring(payload.MoundId or ""), activeMoundSize)
-			elseif payload.Reason == "OutOfRange" then
+			elseif payload.Reason == "OutOfRange" or payload.Reason == "ShovelNotHeld" then
 				DigController.StopMinigame(false)
 			end
 		end
 	end)
+
+	-- Inverted logic: If player puts away / unequips shovel while digging, cancel minigame immediately
+	LocalPlayer:GetAttributeChangedSignal("ShovelToolActive"):Connect(function()
+		if activeMoundId and not isShovelHeld() then
+			DigController.StopMinigame(true)
+			showHintToast("Penggalian dibatalkan karena sekop dilepas.")
+		end
+	end)
+
+	-- Direct click/tap input for minigame strikes with shovel in hand
+	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+		if gameProcessed or isAnyModalOpen() then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if activeMoundId and isShovelHeld() then
+				DigController.AttemptStrike()
+			end
+		end
+	end)
+
+	-- Hook Shovel Tool.Activated on Character for native tool click integration
+	local function hookCharacterTools(char: Model)
+		for _, child in ipairs(char:GetChildren()) do
+			if child:IsA("Tool") and child:GetAttribute("DigPalsShovelTool") == true then
+				child.Activated:Connect(function()
+					if activeMoundId and isShovelHeld() and not isAnyModalOpen() then
+						DigController.AttemptStrike()
+					end
+				end)
+			end
+		end
+		char.ChildAdded:Connect(function(child)
+			if child:IsA("Tool") and child:GetAttribute("DigPalsShovelTool") == true then
+				child.Activated:Connect(function()
+					if activeMoundId and isShovelHeld() and not isAnyModalOpen() then
+						DigController.AttemptStrike()
+					end
+				end)
+			end
+		end)
+	end
+
+	if LocalPlayer.Character then
+		hookCharacterTools(LocalPlayer.Character)
+	end
+	LocalPlayer.CharacterAdded:Connect(hookCharacterTools)
 
 	RunService.RenderStepped:Connect(function()
 		if bagFullLockedMoundId then

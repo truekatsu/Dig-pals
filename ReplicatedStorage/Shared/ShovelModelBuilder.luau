@@ -539,7 +539,7 @@ function ShovelModelBuilder.BuildGameplayTool(shovelId: string): Tool
 	tool.ToolTip = cfg.DisplayName
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
-	tool.ManualActivationOnly = true
+	tool.ManualActivationOnly = false
 	tool:SetAttribute("DigPalsShovelTool", true)
 	tool:SetAttribute("ShovelId", shovelId)
 	-- Calibrated grip so avatar holds the shaft forward with blade ahead
