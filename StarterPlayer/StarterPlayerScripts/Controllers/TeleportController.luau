@@ -55,16 +55,9 @@ local function updatePosition()
 	local insetTop, _ = GuiService:GetGuiInset()
 	local topInsetY = insetTop.Y
 	local pillY = math.max(4, math.floor((topInsetY - 36) / 2))
-	local pillX = 176
 
-	-- Check viewport for narrow screens (e.g. small mobile)
-	local cam = workspace.CurrentCamera
-	local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
-	if vp.X < 540 then
-		pillX = 140
-	end
-
-	pillButton.Position = UDim2.fromOffset(pillX, pillY)
+	pillButton.AnchorPoint = Vector2.new(0.5, 0)
+	pillButton.Position = UDim2.new(0.5, 0, 0, pillY)
 end
 
 local function refreshVisuals()
@@ -161,7 +154,8 @@ local function buildGui()
 
 	local btn = Instance.new("TextButton")
 	btn.Name = "TeleportPill"
-	btn.Size = UDim2.fromOffset(136, 36)
+	btn.AnchorPoint = Vector2.new(0.5, 0)
+	btn.Size = UDim2.fromOffset(140, 36)
 	btn.BackgroundColor3 = COLORS.BgNormal
 	btn.BackgroundTransparency = 0.12
 	btn.AutoButtonColor = false
