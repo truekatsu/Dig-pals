@@ -23,6 +23,7 @@ type ActiveSession = {
 	UserId: number,
 	SessionId: string,
 	Profile: Types.PlayerProfile,
+	SessionStartTime: number?,
 }
 
 local DataService = {}
@@ -237,6 +238,13 @@ function DataService.SaveProfileSession(
 	local now = os.time()
 	local lockConflict = false
 
+	local session = activeSessions[userId]
+	if session and session.SessionStartTime then
+		local elapsed = now - session.SessionStartTime
+		session.SessionStartTime = now
+		profile.TotalPlayTime = (profile.TotalPlayTime or 0) + elapsed
+	end
+
 	local snapshot = deepCopy(profile)
 	snapshot.LastSeen = now
 
@@ -317,6 +325,7 @@ function DataService.LoadPlayer(player: Player): boolean
 		UserId = userId,
 		SessionId = sessionId,
 		Profile = profile,
+		SessionStartTime = os.time(),
 	}
 
 	for _, callback in profileLoadedCallbacks do
@@ -348,6 +357,16 @@ function DataService.SavePlayer(player: Player): boolean
 	end
 	local ok = DataService.SaveProfileSession(session.UserId, session.SessionId, session.Profile, false)
 	return ok
+end
+
+function DataService.GetTotalPlayTime(userId: number): number
+	local session = activeSessions[userId]
+	if not session then
+		return 0
+	end
+	local now = os.time()
+	local elapsed = if session.SessionStartTime then (now - session.SessionStartTime) else 0
+	return (session.Profile.TotalPlayTime or 0) + elapsed
 end
 
 function DataService.IsUsingMemoryFallback(): boolean

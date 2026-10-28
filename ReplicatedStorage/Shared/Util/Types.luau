@@ -163,7 +163,7 @@ export type PlayerProfile = {
 	LastSeen: number,
 }
 
-export type LeaderboardCategory = "WeeklyCoins" | "AllTimeCoins" | "StrongestPet"
+export type LeaderboardCategory = "CurrentCoins" | "PlayTime" | "WeeklyCoins" | "AllTimeCoins" | "StrongestPet"
 
 export type LeaderboardEntry = {
 	Rank: number,

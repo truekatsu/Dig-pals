@@ -19,16 +19,20 @@ local screenGui: ScreenGui? = nil
 local modalFrame: Frame? = nil
 local contentScroll: ScrollingFrame? = nil
 local tabButtons: { [Types.LeaderboardCategory]: TextButton } = {}
-local activeCategory: Types.LeaderboardCategory = "WeeklyCoins"
+local activeCategory: Types.LeaderboardCategory = "CurrentCoins"
 local isOpen = false
 local started = false
 
 local cachedData: {
+	CurrentCoins: { Types.LeaderboardEntry },
+	PlayTime: { Types.LeaderboardEntry },
 	WeeklyCoins: { Types.LeaderboardEntry },
 	AllTimeCoins: { Types.LeaderboardEntry },
 	StrongestPet: { Types.LeaderboardEntry },
 	LastUpdated: number,
 } = {
+	CurrentCoins = {},
+	PlayTime = {},
 	WeeklyCoins = {},
 	AllTimeCoins = {},
 	StrongestPet = {},
@@ -44,6 +48,20 @@ local categoryConfig: {
 		AccentColor: Color3,
 	},
 } = {
+	CurrentCoins = {
+		Title = "TOTAL COIN SAAT INI",
+		Subtitle = "Peringkat Berdasarkan Total Coin Saat Ini",
+		TabLabel = "COINS",
+		ScoreSuffix = "Coin",
+		AccentColor = Color3.fromRGB(80, 225, 120),
+	},
+	PlayTime = {
+		Title = "TOTAL PLAY TIME",
+		Subtitle = "Peringkat Berdasarkan Total Waktu Bermain",
+		TabLabel = "PLAY TIME",
+		ScoreSuffix = "",
+		AccentColor = Color3.fromRGB(0, 195, 255),
+	},
 	WeeklyCoins = {
 		Title = "TOP COIN MINGGUAN",
 		Subtitle = "Reset Otomatis Setiap Senin 00:00 UTC",
@@ -194,7 +212,7 @@ local function renderEntries()
 		scoreLbl.TextSize = 16
 		scoreLbl.TextColor3 = cfg.AccentColor
 		scoreLbl.TextXAlignment = Enum.TextXAlignment.Right
-		scoreLbl.Text = Format.Commas(entry.Score) .. " " .. cfg.ScoreSuffix
+		scoreLbl.Text = if activeCategory == "PlayTime" then entry.FormattedScore else (Format.Commas(entry.Score) .. " " .. cfg.ScoreSuffix)
 		scoreLbl.Parent = card
 	end
 end
@@ -335,12 +353,12 @@ local function buildUI()
 	tabsLayout.Padding = UDim.new(0, 10)
 	tabsLayout.Parent = tabsFrame
 
-	local categories: { Types.LeaderboardCategory } = { "WeeklyCoins", "AllTimeCoins", "StrongestPet" }
+	local categories: { Types.LeaderboardCategory } = { "CurrentCoins", "PlayTime", "WeeklyCoins", "AllTimeCoins", "StrongestPet" }
 	for _, cat in ipairs(categories) do
 		local cfg = categoryConfig[cat]
 		local tabBtn = Instance.new("TextButton")
 		tabBtn.Name = "Tab_" .. cat
-		tabBtn.Size = UDim2.new(0.333, -7, 1, 0)
+		tabBtn.Size = UDim2.new(1 / #categories, -8, 1, 0)
 		tabBtn.BackgroundColor3 = Color3.fromRGB(28, 34, 46)
 		tabBtn.BorderSizePixel = 0
 		tabBtn.Font = Enum.Font.GothamBlack
@@ -505,6 +523,12 @@ function LeaderboardController.Start()
 	-- Listen for server refresh broadcast
 	Remotes.GetEvent("LeaderboardUpdated").OnClientEvent:Connect(function(payload: any)
 		if type(payload) == "table" then
+			if payload.CurrentCoins then
+				cachedData.CurrentCoins = payload.CurrentCoins
+			end
+			if payload.PlayTime then
+				cachedData.PlayTime = payload.PlayTime
+			end
 			if payload.WeeklyCoins then
 				cachedData.WeeklyCoins = payload.WeeklyCoins
 			end

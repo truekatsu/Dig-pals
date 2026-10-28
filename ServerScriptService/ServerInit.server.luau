@@ -2093,20 +2093,19 @@ local function runStep13Verification()
 	verify(boardsFolder ~= nil, "LeaderboardBoards folder exists in Workspace.Plain.Hub")
 
 	if boardsFolder then
-		local bWeekly = boardsFolder:FindFirstChild("Board_WeeklyCoins")
-		local bAllTime = boardsFolder:FindFirstChild("Board_AllTimeCoins")
-		local bPet = boardsFolder:FindFirstChild("Board_StrongestPet")
+		local bCoins = boardsFolder:FindFirstChild("Board_CurrentCoins")
+		local bTime = boardsFolder:FindFirstChild("Board_PlayTime")
 
-		verify(bWeekly ~= nil, "Board_WeeklyCoins physical model exists")
-		verify(bAllTime ~= nil, "Board_AllTimeCoins physical model exists")
-		verify(bPet ~= nil, "Board_StrongestPet physical model exists")
+		verify(bCoins ~= nil, "Board_CurrentCoins physical model exists")
+		verify(bTime ~= nil, "Board_PlayTime physical model exists")
 
-		if bWeekly then
-			local stand = bWeekly:FindFirstChild("BoardStand") :: BasePart?
+		if bCoins then
+			local stand = bCoins:FindFirstChild("BoardStand") :: BasePart?
 			local sGui = stand and stand:FindFirstChild("LeaderboardDisplay") :: SurfaceGui?
-			verify(sGui ~= nil, "Board_WeeklyCoins has SurfaceGui with display")
+			verify(sGui ~= nil, "Board_CurrentCoins has SurfaceGui with display")
 			if sGui then
-				local rows = sGui:FindFirstChild("RowsContainer")
+				local bg = sGui:FindFirstChild("BackgroundFrame")
+				local rows = bg and bg:FindFirstChild("RowsContainer")
 				verify(rows ~= nil and #rows:GetChildren() >= 10, "SurfaceGui has at least 10 ranking row elements")
 			end
 		end
@@ -2115,9 +2114,8 @@ local function runStep13Verification()
 	-- 6. Cached Serving (Zero DataStore Network Overhead on Client Calls)
 	local cachedPayload = LeaderboardService.GetCachedLeaderboards()
 	verify(cachedPayload ~= nil, "GetCachedLeaderboards returns valid payload")
-	verify(type(cachedPayload.WeeklyCoins) == "table", "Payload contains WeeklyCoins")
-	verify(type(cachedPayload.AllTimeCoins) == "table", "Payload contains AllTimeCoins")
-	verify(type(cachedPayload.StrongestPet) == "table", "Payload contains StrongestPet")
+	verify(type(cachedPayload.CurrentCoins) == "table", "Payload contains CurrentCoins")
+	verify(type(cachedPayload.PlayTime) == "table", "Payload contains PlayTime")
 
 	-- Cleanup override
 	LeaderboardService.SetTimeOverride(nil)
