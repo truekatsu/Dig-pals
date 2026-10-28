@@ -189,11 +189,11 @@ function SharedMoundService.GetSpawnPoints(): { { Name: string, Position: Vector
 	end
 	if spawnFolder and #spawnFolder:GetChildren() == 0 then
 		local defaults = {
-			SharedSpawn01 = Vector3.new(0.0, 3.0, 48.0),
-			SharedSpawn02 = Vector3.new(-65.0, 3.0, -10.0),
-			SharedSpawn03 = Vector3.new(65.0, 3.0, -10.0),
-			SharedSpawn04 = Vector3.new(-35.0, 3.0, -70.0),
-			SharedSpawn05 = Vector3.new(35.0, 3.0, -70.0),
+			SharedSpawn01 = Vector3.new(-75.0, 0.0, -25.0),
+			SharedSpawn02 = Vector3.new(-80.0, 0.0, 35.0),
+			SharedSpawn03 = Vector3.new(75.0, 0.0, 45.0),
+			SharedSpawn04 = Vector3.new(95.0, 0.0, -45.0),
+			SharedSpawn05 = Vector3.new(-95.0, 0.0, 10.0),
 		}
 		for name, pos in pairs(defaults) do
 			local p = Instance.new("Part")
@@ -257,6 +257,29 @@ function SharedMoundService.SpawnSharedMound(
 	local hit = workspace:Raycast(chosenPoint.Position + Vector3.new(0, 10, 0), Vector3.new(0, -30, 0), raycastParams)
 	if hit then
 		groundPos = hit.Position
+	end
+
+	local MoundService = require(script.Parent:WaitForChild("MoundService"))
+	local isForbidden, reason = MoundService.IsPositionForbidden(groundPos, 10.0)
+	if isForbidden then
+		warn("[SharedMoundService] Chosen spawn point " .. chosenPoint.Name .. " is forbidden (" .. tostring(reason) .. "), finding alternative...")
+		for _, altPoint in ipairs(spawnPoints) do
+			if altPoint ~= chosenPoint then
+				local altHit = workspace:Raycast(altPoint.Position + Vector3.new(0, 10, 0), Vector3.new(0, -30, 0), raycastParams)
+				local altPos = altHit and altHit.Position or altPoint.Position
+				local altForbidden = MoundService.IsPositionForbidden(altPos, 10.0)
+				if not altForbidden then
+					chosenPoint = altPoint
+					groundPos = altPos
+					isForbidden = false
+					break
+				end
+			end
+		end
+		if isForbidden then
+			warn("[SharedMoundService] All SharedMoundSpawns are currently forbidden! Aborting spawn.")
+			return nil
+		end
 	end
 
 	local moundId = string.format("SharedMound_%d", os.time())
