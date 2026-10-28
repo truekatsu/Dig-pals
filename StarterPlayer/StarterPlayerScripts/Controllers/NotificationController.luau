@@ -104,7 +104,7 @@ function NotificationController.Notify(title: string, message: string, rarity: s
 
 	-- Enforce queue limit: if at maximum, immediately dismiss oldest card
 	while #activeCards >= MAX_VISIBLE_NOTIFICATIONS do
-		dismissCard(activeCards[1], true)
+		dismissCard(activeCards[1], false)
 	end
 
 	local rarityColor = getRarityColor(rarity)

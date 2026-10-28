@@ -182,6 +182,30 @@ function SharedMoundService.GetSpawnPoints(): { { Name: string, Position: Vector
 	local points = {}
 	local plain = workspace:FindFirstChild("Plain")
 	local spawnFolder = plain and plain:FindFirstChild("SharedMoundSpawns")
+	if not spawnFolder and plain then
+		spawnFolder = Instance.new("Folder")
+		spawnFolder.Name = "SharedMoundSpawns"
+		spawnFolder.Parent = plain
+	end
+	if spawnFolder and #spawnFolder:GetChildren() == 0 then
+		local defaults = {
+			SharedSpawn01 = Vector3.new(0.0, 3.0, 48.0),
+			SharedSpawn02 = Vector3.new(-65.0, 3.0, -10.0),
+			SharedSpawn03 = Vector3.new(65.0, 3.0, -10.0),
+			SharedSpawn04 = Vector3.new(-35.0, 3.0, -70.0),
+			SharedSpawn05 = Vector3.new(35.0, 3.0, -70.0),
+		}
+		for name, pos in pairs(defaults) do
+			local p = Instance.new("Part")
+			p.Name = name
+			p.Position = pos
+			p.Size = Vector3.new(4, 1, 4)
+			p.Anchored = true
+			p.CanCollide = false
+			p.Transparency = 1
+			p.Parent = spawnFolder
+		end
+	end
 	if spawnFolder then
 		for _, child in ipairs(spawnFolder:GetChildren()) do
 			if child:IsA("BasePart") then
