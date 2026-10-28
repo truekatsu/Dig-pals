@@ -73,10 +73,10 @@ end
 
 local function toggleInventory()
 	if InventoryController.IsOpen() then
-		InventoryController.ClosePanel()
+		InventoryController.CloseInventory()
 	else
 		InputController.CloseActiveModal()
-		InventoryController.TogglePanel()
+		InventoryController.OpenInventory("Items")
 	end
 end
 
@@ -136,7 +136,13 @@ local function handleInputBegan(input: InputObject, gameProcessed: boolean)
 	end
 
 	-- PC Keyboard Shortcuts
-	if key == Enum.KeyCode.B then
+	if key == Enum.KeyCode.One or key == Enum.KeyCode.KeypadOne then
+		InventoryController.SelectHotbarSlot(1)
+	elseif key == Enum.KeyCode.Two or key == Enum.KeyCode.KeypadTwo then
+		InventoryController.SelectHotbarSlot(2)
+	elseif key == Enum.KeyCode.Three or key == Enum.KeyCode.KeypadThree then
+		InventoryController.SelectHotbarSlot(3)
+	elseif key == Enum.KeyCode.B then
 		toggleInventory()
 	elseif key == Enum.KeyCode.P then
 		togglePets()
