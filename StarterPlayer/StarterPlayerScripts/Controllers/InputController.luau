@@ -71,15 +71,6 @@ function InputController.IsAnyModalOpen(): boolean
 		or OfflineIncomeController.IsOpen()
 end
 
-local function toggleShovelShop()
-	if ShovelShopController.IsOpen() then
-		ShovelShopController.ClosePanel()
-	else
-		InputController.CloseActiveModal()
-		ShovelShopController.OpenPanel(nil)
-	end
-end
-
 local function toggleInventory()
 	if InventoryController.IsOpen() then
 		InventoryController.ClosePanel()
@@ -155,8 +146,6 @@ local function handleInputBegan(input: InputObject, gameProcessed: boolean)
 		toggleQuests()
 	elseif key == Enum.KeyCode.L then
 		toggleLeaderboard()
-	elseif key == Enum.KeyCode.S then
-		toggleShovelShop()
 	elseif key == Enum.KeyCode.T then
 		TeleportController.Toggle()
 	end
@@ -171,8 +160,6 @@ local function handleInputBegan(input: InputObject, gameProcessed: boolean)
 	elseif key == Enum.KeyCode.ButtonSelect then
 		-- Xbox View / PS Share: Toggle Quests
 		toggleQuests()
-	elseif key == Enum.KeyCode.DPadUp then
-		toggleShovelShop()
 	elseif key == Enum.KeyCode.DPadRight then
 		toggleIndex()
 	elseif key == Enum.KeyCode.DPadLeft then
