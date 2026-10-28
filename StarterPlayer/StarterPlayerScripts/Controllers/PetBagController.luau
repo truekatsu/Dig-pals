@@ -1384,27 +1384,6 @@ function PetBagController.Start()
 		end,
 	})
 
-	-- Bind Hotbar Key [3] for Pet Bag
-	ContextActionService:BindAction(
-		"TogglePetBagHotbarKey",
-		function(_actionName, inputState, inputObject)
-			if inputState == Enum.UserInputState.Begin then
-				if inputObject.KeyCode == Enum.KeyCode.Three or inputObject.KeyCode == Enum.KeyCode.KeypadThree then
-					PetBagController.Toggle()
-					return Enum.ContextActionResult.Sink
-				elseif inputObject.KeyCode == Enum.KeyCode.Escape and isOpen then
-					PetBagController.Close()
-					return Enum.ContextActionResult.Sink
-				end
-			end
-			return Enum.ContextActionResult.Pass
-		end,
-		false,
-		Enum.KeyCode.Three,
-		Enum.KeyCode.KeypadThree,
-		Enum.KeyCode.Escape
-	)
-
 	-- Initial state fetch
 	task.spawn(function()
 		local ok, snap = pcall(function()

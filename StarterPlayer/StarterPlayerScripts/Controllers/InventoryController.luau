@@ -1,6 +1,6 @@
 --!strict
 -- MASTER HOTBAR & INVENTORY UI SYSTEM FOR DIG PALS
--- Pixel-faithful implementation of Hotbar (3 slots) and Main Inventory (4 tabs: Items, Shovel, Eggs, Pet)
+-- Nine-slot expedition hotbar, shovel locker, and three-category field bag.
 -- Native Roblox UI components, responsive layout, smooth TweenService animations, and clean state management.
 
 local ContextActionService = game:GetService("ContextActionService")
@@ -14,6 +14,7 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 local InventoryController = {}
+local MenuIcons = require(script.Parent:WaitForChild("MenuIcons"))
 
 -- ============================================================================
 -- 1. CONFIGURATION & ASSET IDS
@@ -55,17 +56,17 @@ local ASSETS: AssetConfigType = {
 		MoonlitShovel = "rbxassetid://133100007987104",
 		ShovelSilhouette = "rbxassetid://84922947564946",
 		BackpackSilhouette = "rbxassetid://109542587138207",
-		Shovel = "rbxassetid://97280527431570",
-		Backpack = "rbxassetid://107224769384354",
+		Shovel = MenuIcons.Shovel,
+		Backpack = MenuIcons.Bag,
 		CardDiamondShovelFull = "rbxassetid://139957201917755",
 		CardShovelFull = "rbxassetid://93638470629241",
 		CardItemsFull = "rbxassetid://107111835155021",
 	},
 	Tabs = {
-		Items = "rbxassetid://79466897675848",
-		Shovel = "rbxassetid://120935389489926",
-		Eggs = "rbxassetid://130331584394701",
-		Pet = "rbxassetid://122331049003912",
+		Items = MenuIcons.Items,
+		Shovel = MenuIcons.Shovel,
+		Eggs = MenuIcons.Eggs,
+		Pet = MenuIcons.Pet,
 	},
 	CloseButton = "rbxassetid://125212219786214",
 }
@@ -118,13 +119,13 @@ local SHOVEL_CONFIGS: {
 -- Visual Palette matching reference images (95%+ visual similarity)
 local COLORS = {
 	-- Hotbar Card Colors
-	CardBgNormal = Color3.fromRGB(36, 32, 32),
-	CardBgNormalGradient = Color3.fromRGB(24, 21, 21),
-	CardBgSelectedDiamond = Color3.fromRGB(13, 20, 32),
-	CardBgSelectedGradient = Color3.fromRGB(18, 28, 44),
+	CardBgNormal = Color3.fromRGB(80, 123, 141),
+	CardBgNormalGradient = Color3.fromRGB(43, 76, 91),
+	CardBgSelectedDiamond = Color3.fromRGB(255, 205, 86),
+	CardBgSelectedGradient = Color3.fromRGB(206, 128, 38),
 	CardBorderNormal = Color3.fromRGB(10, 8, 8),
-	CardBorderSelected = Color3.fromRGB(0, 245, 255), -- Electric Cyan
-	CardGlowCyan = Color3.fromRGB(0, 215, 255),
+	CardBorderSelected = Color3.fromRGB(255, 231, 139), -- Electric Cyan
+	CardGlowCyan = Color3.fromRGB(255, 231, 139),
 
 	-- Badge Colors
 	BadgeBg = Color3.fromRGB(16, 16, 18),
@@ -137,23 +138,23 @@ local COLORS = {
 	TextItems = Color3.fromRGB(254, 227, 128),
 
 	-- Main Inventory Panel Colors
-	PanelBg = Color3.fromRGB(24, 20, 22),
-	PanelBgGradient = Color3.fromRGB(18, 15, 16),
+	PanelBg = Color3.fromRGB(255, 243, 211),
+	PanelBgGradient = Color3.fromRGB(230, 211, 166),
 	PanelBorder = Color3.fromRGB(16, 12, 14),
-	PanelRim = Color3.fromRGB(38, 32, 34),
-	ContentBg = Color3.fromRGB(14, 12, 14),
+	PanelRim = Color3.fromRGB(255, 252, 232),
+	ContentBg = Color3.fromRGB(247, 235, 205),
 	ContentBorder = Color3.fromRGB(32, 28, 30),
 	ScrollbarTrack = Color3.fromRGB(75, 75, 90),
 
 	-- Tab Inactive Colors
-	TabInactiveBg = Color3.fromRGB(34, 37, 44),
+	TabInactiveBg = Color3.fromRGB(70, 101, 114),
 	TabInactiveBorder = Color3.fromRGB(18, 20, 24),
 	TabInactiveText = Color3.fromRGB(255, 255, 255),
 
 	-- Tab Active Colors (Blue Gradient & Cyan Glow)
-	TabActiveGradientTop = Color3.fromRGB(0, 145, 255),
-	TabActiveGradientBottom = Color3.fromRGB(0, 95, 225),
-	TabActiveBorder = Color3.fromRGB(0, 225, 255),
+	TabActiveGradientTop = Color3.fromRGB(67, 185, 157),
+	TabActiveGradientBottom = Color3.fromRGB(27, 127, 115),
+	TabActiveBorder = Color3.fromRGB(22, 47, 51),
 	TabActiveText = Color3.fromRGB(255, 255, 255),
 
 	-- Close Button Red Gradient
@@ -423,14 +424,14 @@ local function updateResponsiveLayout()
 	local vh = vp.Y
 
 	if hotbarScale then
-		local factorX = math.clamp(vw / 820, 0.48, 1.1)
-		local factorY = math.clamp(vh / 900, 0.55, 1.1)
+		local factorX = math.clamp((vw - 28) / 790, 0.25, 1)
+		local factorY = math.clamp(vh / 600, 0.4, 1)
 		hotbarScale.Scale = math.min(factorX, factorY)
 	end
 
 	if inventoryScale then
-		local factorX = math.clamp(vw / 1100, 0.52, 1.05)
-		local factorY = math.clamp(vh / 750, 0.52, 1.05)
+		local factorX = math.clamp((vw - 24) / 1100, 0.25, 1.05)
+		local factorY = math.clamp((vh - 40) / 750, 0.25, 1.05)
 		inventoryScale.Scale = math.min(factorX, factorY)
 	end
 end
@@ -458,7 +459,7 @@ function InventoryController.UpdateHotbarAppearance()
 
 			pcall(function()
 				local popTween = TweenService:Create(comp.Button, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Size = UDim2.fromOffset(222, 178),
+					Size = UDim2.fromOffset(76, 82),
 				})
 				popTween:Play()
 			end)
@@ -477,7 +478,7 @@ function InventoryController.UpdateHotbarAppearance()
 
 			pcall(function()
 				local resetTween = TweenService:Create(comp.Button, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Size = UDim2.fromOffset(216, 172),
+					Size = UDim2.fromOffset(76, 82),
 				})
 				resetTween:Play()
 			end)
@@ -534,6 +535,7 @@ function InventoryController.UpdateInventoryContent()
 		container.Visible = shouldBeVisible
 	end
 
+	if InventoryController.RefreshCollection then InventoryController.RefreshCollection() end
 	if onCategoryChangedHook then
 		pcall(onCategoryChangedHook, activeCategory)
 	end
@@ -543,10 +545,11 @@ end
 -- 6. NAVIGATION & PUBLIC CONTROLLER API
 -- ============================================================================
 function InventoryController.SelectHotbarSlot(slotNumber: number)
-	if slotNumber < 1 or slotNumber > 3 then
+	if slotNumber < 1 or slotNumber > 9 then
 		return
 	end
 
+	if slotNumber > 3 then return end
 	selectedSlot = slotNumber
 	InventoryController.UpdateHotbarAppearance()
 
@@ -713,7 +716,7 @@ local function buildDigPalsUI()
 	hotbar.Name = "HotbarContainer"
 	hotbar.AnchorPoint = Vector2.new(0.5, 1)
 	hotbar.Position = UDim2.new(0.5, 0, 1, -22)
-	hotbar.Size = UDim2.fromOffset(680, 180)
+	hotbar.Size = UDim2.fromOffset(778, 88)
 	hotbar.BackgroundTransparency = 1
 	hotbar.BorderSizePixel = 0
 	hotbar.ZIndex = 10
@@ -732,7 +735,7 @@ local function buildDigPalsUI()
 	hbLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	hbLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	hbLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	hbLayout.Padding = UDim.new(0, 14)
+	hbLayout.Padding = UDim.new(0, 10)
 	hbLayout.Parent = hotbar
 
 	-- Define 3 Slot Configurations
@@ -756,18 +759,18 @@ local function buildDigPalsUI()
 		[2] = {
 			Name = "Slot2_Shovel",
 			Number = 2,
-			Title = "Shovel",
+			Title = "Shovels",
 			TitleColor = COLORS.TextShovel,
-			IconAsset = ASSETS.Hotbar.ShovelSilhouette,
+			IconAsset = ASSETS.Hotbar.Shovel,
 			IconSize = UDim2.fromOffset(128, 108),
 			IconPos = UDim2.new(0.5, 0, 0.44, 0),
 		},
 		[3] = {
 			Name = "Slot3_Items",
 			Number = 3,
-			Title = "Items",
+			Title = "Bag",
 			TitleColor = COLORS.TextItems,
-			IconAsset = ASSETS.Hotbar.BackpackSilhouette,
+			IconAsset = ASSETS.Hotbar.Backpack,
 			IconSize = UDim2.fromOffset(120, 106),
 			IconPos = UDim2.new(0.5, 0, 0.44, 0),
 		},
@@ -779,7 +782,7 @@ local function buildDigPalsUI()
 		local cardBtn = Instance.new("ImageButton")
 		cardBtn.Name = cfg.Name
 		cardBtn.LayoutOrder = slotNum
-		cardBtn.Size = UDim2.fromOffset(216, 172)
+		cardBtn.Size = UDim2.fromOffset(76, 82)
 		cardBtn.BackgroundColor3 = COLORS.CardBgNormal
 		cardBtn.BorderSizePixel = 0
 		cardBtn.AutoButtonColor = false
@@ -1015,7 +1018,7 @@ local function buildDigPalsUI()
 		[1] = {
 			Id = "Items",
 			Order = 1,
-			Title = "Items",
+			Title = "Bag",
 			IconAsset = ASSETS.Tabs.Items,
 			Width = 162,
 			IconSize = UDim2.fromOffset(36, 32),
@@ -1023,7 +1026,7 @@ local function buildDigPalsUI()
 		[2] = {
 			Id = "Shovel",
 			Order = 2,
-			Title = "Shovel",
+			Title = "Shovels",
 			IconAsset = ASSETS.Tabs.Shovel,
 			Width = 160,
 			IconSize = UDim2.fromOffset(36, 32),
@@ -1103,6 +1106,7 @@ local function buildDigPalsUI()
 		tabIcon.AnchorPoint = Vector2.new(0, 0.5)
 		tabIcon.Position = UDim2.new(0, 12, 0.5, 0)
 		tabIcon.Size = tCfg.IconSize
+		tabIcon.Size = UDim2.fromOffset(34, 34)
 		tabIcon.BackgroundTransparency = 1
 		tabIcon.Image = tCfg.IconAsset
 		tabIcon.ScaleType = Enum.ScaleType.Fit
@@ -1315,7 +1319,8 @@ function InventoryController.Start()
 	end)
 
 	buildDigPalsUI()
-	bindInputEvents()
+	-- InputController owns keyboard bindings; avoid duplicate B toggles.
+	require(script.Parent:WaitForChild("AdventureInventoryUI")).Mount(InventoryController, screenGui, SHOVEL_CONFIGS)
 
 	-- Attribute change listener for dynamic shovel synchronization
 	local function onShovelAttrChanged()
