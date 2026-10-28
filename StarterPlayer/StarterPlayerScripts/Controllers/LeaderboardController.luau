@@ -79,7 +79,7 @@ local function updateResponsiveScale(uiScale: UIScale)
 	local vp = cam.ViewportSize
 	local scaleW = vp.X / 900
 	local scaleH = vp.Y / 660
-	uiScale.Scale = math.clamp(math.min(1, scaleW, scaleH), 0.72, 1.0)
+	uiScale.Scale = math.clamp(math.min(1, scaleW, scaleH), 0.55, 1.0)
 end
 
 local function renderEntries()

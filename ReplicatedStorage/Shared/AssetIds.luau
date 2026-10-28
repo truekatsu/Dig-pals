@@ -3,15 +3,15 @@
 
 local AssetIds = {
 	Sounds = {
-		StrikePerfect = "rbxassetid://9119713951",
-		StrikeGood = "rbxassetid://9119713520",
-		StrikeMiss = "rbxassetid://9119720940",
-		MoundBreak = "rbxassetid://9114221580",
-		RareDrop = "rbxassetid://9119707219",
-		EggHatch = "rbxassetid://9119707015",
-		LevelUp = "rbxassetid://9119706773",
-		BaseUpgrade = "rbxassetid://9119706511",
-		CoinGain = "rbxassetid://9119706183",
+		StrikePerfect = "rbxasset://sounds/electronicpingshort.wav",
+		StrikeGood = "rbxasset://sounds/snap.mp3",
+		StrikeMiss = "rbxasset://sounds/uianvil.wav",
+		MoundBreak = "rbxasset://sounds/uianvil.wav",
+		RareDrop = "rbxasset://sounds/electronicpingshort.wav",
+		EggHatch = "rbxasset://sounds/snap.mp3",
+		LevelUp = "rbxasset://sounds/electronicpingshort.wav",
+		BaseUpgrade = "rbxasset://sounds/action_jump.mp3",
+		CoinGain = "rbxasset://sounds/button_click.wav",
 	},
 	Icons = {
 		Coin = "rbxassetid://6034973115",

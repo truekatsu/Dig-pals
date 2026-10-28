@@ -430,6 +430,25 @@ local function buildUI()
 	card.BorderSizePixel = 0
 	card.Parent = modal
 
+	local uiScale = Instance.new("UIScale")
+	uiScale.Parent = card
+
+	local function updateResponsiveScale()
+		local cam = workspace.CurrentCamera
+		if not cam then
+			return
+		end
+		local vp = cam.ViewportSize
+		local scaleW = vp.X / 680
+		local scaleH = vp.Y / 560
+		uiScale.Scale = math.clamp(math.min(1, scaleW, scaleH), 0.55, 1.0)
+	end
+	updateResponsiveScale()
+	local cam = workspace.CurrentCamera
+	if cam then
+		cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
+	end
+
 	local cardCorner = Instance.new("UICorner")
 	cardCorner.CornerRadius = UDim.new(0, 14)
 	cardCorner.Parent = card
@@ -441,7 +460,7 @@ local function buildUI()
 
 	local header = Instance.new("TextLabel")
 	header.Name = "Header"
-	header.Size = UDim2.new(1, -60, 0, 36)
+	header.Size = UDim2.new(1, -68, 0, 36)
 	header.Position = UDim2.fromOffset(20, 14)
 	header.BackgroundTransparency = 1
 	header.Font = Enum.Font.GothamBlack
@@ -453,12 +472,12 @@ local function buildUI()
 
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Name = "CloseButton"
-	closeBtn.Size = UDim2.fromOffset(36, 36)
-	closeBtn.Position = UDim2.new(1, -48, 0, 14)
+	closeBtn.Size = UDim2.fromOffset(44, 44)
+	closeBtn.Position = UDim2.new(1, -54, 0, 10)
 	closeBtn.BackgroundColor3 = Color3.fromRGB(50, 40, 50)
 	closeBtn.BorderSizePixel = 0
 	closeBtn.Font = Enum.Font.GothamBlack
-	closeBtn.TextSize = 16
+	closeBtn.TextSize = 18
 	closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120)
 	closeBtn.Text = "X"
 	closeBtn.Parent = card
@@ -486,7 +505,7 @@ local function buildUI()
 
 	local tabContainer = Instance.new("Frame")
 	tabContainer.Name = "TabContainer"
-	tabContainer.Size = UDim2.new(1, -40, 0, 38)
+	tabContainer.Size = UDim2.new(1, -40, 0, 44)
 	tabContainer.Position = UDim2.fromOffset(20, 74)
 	tabContainer.BackgroundTransparency = 1
 	tabContainer.Parent = card

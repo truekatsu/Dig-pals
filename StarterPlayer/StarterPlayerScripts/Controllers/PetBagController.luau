@@ -178,7 +178,7 @@ local function updateResponsiveScale()
 	local scaleX = vw / 1024
 	local scaleY = vh / 640
 	local scale = math.min(scaleX, scaleY)
-	uiScale.Scale = math.clamp(scale, 0.72, 1.25)
+	uiScale.Scale = math.clamp(scale, 0.55, 1.25)
 end
 
 local function setStatusMessage(msg: string?, isError: boolean)
@@ -966,12 +966,12 @@ local function buildPetBagGui()
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Name = "CloseButton"
 	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
-	closeBtn.Position = UDim2.new(1, -14, 0.5, 0)
-	closeBtn.Size = UDim2.fromOffset(32, 32)
+	closeBtn.Position = UDim2.new(1, -10, 0.5, 0)
+	closeBtn.Size = UDim2.fromOffset(44, 44)
 	closeBtn.BackgroundColor3 = Color3.fromRGB(44, 52, 68)
 	closeBtn.BorderSizePixel = 0
 	closeBtn.Font = Enum.Font.GothamBold
-	closeBtn.TextSize = 14
+	closeBtn.TextSize = 16
 	closeBtn.TextColor3 = COLORS.TextPrimary
 	closeBtn.Text = "X"
 	closeBtn.Parent = header

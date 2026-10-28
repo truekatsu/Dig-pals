@@ -19,6 +19,8 @@ local InventoryController = require(script.Parent:WaitForChild("InventoryControl
 local HudController = require(script.Parent:WaitForChild("HudController"))
 local MerchantController = require(script.Parent:WaitForChild("MerchantController"))
 local ShovelShopController = require(script.Parent:WaitForChild("ShovelShopController"))
+local FxController = require(script.Parent:WaitForChild("FxController"))
+local InputController = require(script.Parent:WaitForChild("InputController"))
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -49,7 +51,7 @@ local feedbackLabel: TextLabel? = nil
 local hintToastLabel: TextLabel? = nil
 
 local function isAnyModalOpen(): boolean
-	return InventoryController.IsOpen() or MerchantController.IsOpen() or ShovelShopController.IsOpen()
+	return InputController.IsAnyModalOpen()
 end
 
 local function getEquippedShovelCooldown(): number
@@ -317,6 +319,7 @@ local function showStrikeFeedback(grade: string, damage: number)
 	if grade == "Perfect" then
 		color = AssetIds.Colors.ZonePerfect
 		labelText = string.format("PERFECT! (-%d HP)", math.floor(damage))
+		FxController.PlayPerfectStrikeFx()
 	elseif grade == "Good" then
 		color = AssetIds.Colors.ZoneGood
 		labelText = string.format("GOOD (-%d HP)", math.floor(damage))
@@ -381,6 +384,23 @@ local function createDigUI()
 	container.Visible = false
 	container.Parent = gui
 	hudContainer = container
+
+	local scaleInst = Instance.new("UIScale")
+	scaleInst.Parent = container
+	local function updateResponsiveScale()
+		local cam = workspace.CurrentCamera
+		if not cam then
+			return
+		end
+		local vp = cam.ViewportSize
+		local scale = math.min(vp.X / 720, vp.Y / 540)
+		scaleInst.Scale = math.clamp(scale, 0.7, 1.0)
+	end
+	updateResponsiveScale()
+	local cam = workspace.CurrentCamera
+	if cam then
+		cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
+	end
 
 	local feedback = Instance.new("TextLabel")
 	feedback.Name = "FeedbackLabel"
@@ -560,6 +580,11 @@ function DigController.Start()
 		end
 
 		if not activeMoundId then
+			return
+		end
+
+		if isAnyModalOpen() then
+			DigController.StopMinigame(true)
 			return
 		end
 

@@ -914,7 +914,7 @@ local function updateResponsiveScale()
 	local vp = cam.ViewportSize
 	local scaleW = vp.X / 900
 	local scaleH = vp.Y / 660
-	uiScale.Scale = math.clamp(math.min(1, scaleW, scaleH), 0.72, 1.0)
+	uiScale.Scale = math.clamp(math.min(1, scaleW, scaleH), 0.55, 1.0)
 end
 
 local function buildInventoryGui()
@@ -1179,12 +1179,12 @@ local function buildInventoryGui()
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Name = "CloseButton"
 	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
-	closeBtn.Position = UDim2.new(1, -12, 0.5, 0)
-	closeBtn.Size = UDim2.fromOffset(34, 34)
+	closeBtn.Position = UDim2.new(1, -10, 0.5, 0)
+	closeBtn.Size = UDim2.fromOffset(44, 44)
 	closeBtn.BackgroundColor3 = Color3.fromRGB(205, 68, 76)
 	closeBtn.BorderSizePixel = 0
 	closeBtn.Font = Enum.Font.GothamBlack
-	closeBtn.TextSize = 16
+	closeBtn.TextSize = 18
 	closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	closeBtn.Text = "X"
 	closeBtn.ZIndex = 12

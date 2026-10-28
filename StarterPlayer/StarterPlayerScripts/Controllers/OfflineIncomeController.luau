@@ -51,6 +51,10 @@ function OfflineIncomeController.Close()
 	end
 end
 
+function OfflineIncomeController.IsOpen(): boolean
+	return modalFrame ~= nil and modalFrame.Visible == true
+end
+
 function OfflineIncomeController.Show(data: {
 	OfflineSeconds: number,
 	CappedSeconds: number,
