@@ -21,6 +21,14 @@ local InventoryController = {}
 export type AssetConfigType = {
 	Hotbar: {
 		DiamondShovel: string,
+		RustyShovel: string,
+		StoneShovel: string,
+		IronShovel: string,
+		GoldenShovel: string,
+		MossyShovel: string,
+		MoonlitShovel: string,
+		ShovelSilhouette: string,
+		BackpackSilhouette: string,
 		Shovel: string,
 		Backpack: string,
 		CardDiamondShovelFull: string,
@@ -39,6 +47,14 @@ export type AssetConfigType = {
 local ASSETS: AssetConfigType = {
 	Hotbar = {
 		DiamondShovel = "rbxassetid://91702610144104",
+		RustyShovel = "rbxassetid://97280527431570",
+		StoneShovel = "rbxassetid://133034591088020",
+		IronShovel = "rbxassetid://97280527431570",
+		GoldenShovel = "rbxassetid://100895397684604",
+		MossyShovel = "rbxassetid://103006088766240",
+		MoonlitShovel = "rbxassetid://133100007987104",
+		ShovelSilhouette = "rbxassetid://84922947564946",
+		BackpackSilhouette = "rbxassetid://109542587138207",
 		Shovel = "rbxassetid://97280527431570",
 		Backpack = "rbxassetid://107224769384354",
 		CardDiamondShovelFull = "rbxassetid://139957201917755",
@@ -54,26 +70,71 @@ local ASSETS: AssetConfigType = {
 	CloseButton = "rbxassetid://125212219786214",
 }
 
+-- Shovel configuration & visual styling for Hotbar Slot 1 dynamic sync
+local SHOVEL_CONFIGS: {
+	[string]: {
+		DisplayName: string,
+		Icon: string,
+		TextColor: Color3,
+	},
+} = {
+	RustyShovel = {
+		DisplayName = "Rusty Shovel",
+		Icon = "rbxassetid://97280527431570",
+		TextColor = Color3.fromRGB(235, 185, 130),
+	},
+	StoneShovel = {
+		DisplayName = "Stone Shovel",
+		Icon = "rbxassetid://133034591088020",
+		TextColor = Color3.fromRGB(215, 220, 230),
+	},
+	IronShovel = {
+		DisplayName = "Iron Shovel",
+		Icon = "rbxassetid://97280527431570",
+		TextColor = Color3.fromRGB(195, 225, 255),
+	},
+	GoldenShovel = {
+		DisplayName = "Golden Shovel",
+		Icon = "rbxassetid://100895397684604",
+		TextColor = Color3.fromRGB(255, 220, 65),
+	},
+	DiamondShovel = {
+		DisplayName = "Diamond Shovel",
+		Icon = "rbxassetid://91702610144104",
+		TextColor = Color3.fromRGB(70, 230, 255),
+	},
+	MossyShovel = {
+		DisplayName = "Mossy Shovel",
+		Icon = "rbxassetid://103006088766240",
+		TextColor = Color3.fromRGB(125, 245, 155),
+	},
+	MoonlitShovel = {
+		DisplayName = "Moonlit Shovel",
+		Icon = "rbxassetid://133100007987104",
+		TextColor = Color3.fromRGB(220, 190, 255),
+	},
+}
+
 -- Visual Palette matching reference images (95%+ visual similarity)
 local COLORS = {
 	-- Hotbar Card Colors
-	CardBgNormal = Color3.fromRGB(22, 18, 18),
-	CardBgNormalGradient = Color3.fromRGB(28, 22, 22),
+	CardBgNormal = Color3.fromRGB(36, 32, 32),
+	CardBgNormalGradient = Color3.fromRGB(24, 21, 21),
 	CardBgSelectedDiamond = Color3.fromRGB(13, 20, 32),
 	CardBgSelectedGradient = Color3.fromRGB(18, 28, 44),
-	CardBorderNormal = Color3.fromRGB(14, 12, 12),
+	CardBorderNormal = Color3.fromRGB(10, 8, 8),
 	CardBorderSelected = Color3.fromRGB(0, 245, 255), -- Electric Cyan
 	CardGlowCyan = Color3.fromRGB(0, 215, 255),
 
 	-- Badge Colors
-	BadgeBg = Color3.fromRGB(26, 26, 30),
-	BadgeBorder = Color3.fromRGB(92, 97, 108),
+	BadgeBg = Color3.fromRGB(16, 16, 18),
+	BadgeBorder = Color3.fromRGB(60, 60, 68),
 	BadgeText = Color3.fromRGB(255, 255, 255),
 
 	-- Hotbar Text Colors
 	TextDiamondShovel = Color3.fromRGB(70, 230, 255),
 	TextShovel = Color3.fromRGB(255, 255, 255),
-	TextItems = Color3.fromRGB(255, 228, 125),
+	TextItems = Color3.fromRGB(254, 227, 128),
 
 	-- Main Inventory Panel Colors
 	PanelBg = Color3.fromRGB(24, 20, 22),
@@ -104,10 +165,11 @@ local COLORS = {
 -- ============================================================================
 -- 2. STATE (SINGLE SOURCE OF TRUTH)
 -- ============================================================================
-local selectedSlot: number = 1 -- 1: Diamond Shovel, 2: Shovel, 3: Items
+local selectedSlot: number = 1 -- 1: Equipped Shovel, 2: Shovel, 3: Items
 local activeCategory: string = "Items" -- "Items", "Shovel", "Eggs", "Pet"
 local isInventoryOpen: boolean = false
 local started: boolean = false
+local currentEquippedShovelId: string = "RustyShovel"
 
 -- UI Instance References
 local screenGui: ScreenGui? = nil
@@ -151,45 +213,100 @@ local categoryContainersByName: { [string]: ScrollingFrame } = {}
 local onSlotSelectedHook: ((slotNumber: number) -> ())? = nil
 local onCategoryChangedHook: ((category: string) -> ())? = nil
 
+-- Forward declarations of local helper functions
+local resolveUI: () -> ()
+local equipToolForSlot: (slotNumber: number) -> ()
+
 -- ============================================================================
--- 3. TOOL INTEGRATION (CONFIGURABLE)
+-- 3. TOOL INTEGRATION (DYNAMIC EQUIPPED SHOVEL SYNC)
 -- ============================================================================
-local function equipToolForSlot(slotNumber: number)
+function InventoryController.SyncEquippedShovel(targetShovelId: string?)
+	resolveUI()
+	local id = targetShovelId or LocalPlayer:GetAttribute("EquippedShovel")
+	if typeof(id) ~= "string" or id == "" then
+		id = "RustyShovel"
+	end
+
+	currentEquippedShovelId = id
+
+	local cfg = SHOVEL_CONFIGS[id]
+	if not cfg then
+		local displayName = id
+		pcall(function()
+			local Shared = ReplicatedStorage:FindFirstChild("Shared")
+			local ShovelsMod = Shared and Shared:FindFirstChild("Config") and Shared.Config:FindFirstChild("Shovels")
+			if ShovelsMod then
+				local sCfg = require(ShovelsMod) :: any
+				if sCfg.All and sCfg.All[id] then
+					displayName = sCfg.All[id].DisplayName or id
+				end
+			end
+		end)
+		cfg = {
+			DisplayName = displayName,
+			Icon = ASSETS.Hotbar.RustyShovel,
+			TextColor = Color3.fromRGB(255, 255, 255),
+		}
+	end
+
+	local comp1 = slotComponentsByNumber[1]
+	if comp1 then
+		comp1.NameLabel.Text = cfg.DisplayName
+		comp1.NameLabel.TextColor3 = cfg.TextColor
+		comp1.Icon.Image = cfg.Icon
+	elseif hotbarContainer then
+		local slot1Btn = (hotbarContainer:FindFirstChild("Slot1_EquippedShovel") or hotbarContainer:FindFirstChild("Slot1_DiamondShovel")) :: ImageButton?
+		if slot1Btn then
+			local nameLbl = slot1Btn:FindFirstChild("SlotName") :: TextLabel?
+			local iconImg = slot1Btn:FindFirstChild("SlotIcon") :: ImageLabel?
+			if nameLbl then
+				nameLbl.Text = cfg.DisplayName
+				nameLbl.TextColor3 = cfg.TextColor
+			end
+			if iconImg then
+				iconImg.Image = cfg.Icon
+			end
+		end
+	end
+
+	-- If Slot 1 is currently selected, ensure character equips this shovel tool
+	if selectedSlot == 1 then
+		equipToolForSlot(1)
+	end
+end
+
+function equipToolForSlot(slotNumber: number)
 	if slotNumber == 1 then
-		-- Diamond Shovel (Equip primary digging shovel)
+		local shovelId = currentEquippedShovelId or LocalPlayer:GetAttribute("EquippedShovel") or "RustyShovel"
 		local character = LocalPlayer.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
 
 		if humanoid and backpack then
-			local diamondTool = backpack:FindFirstChild("DiamondShovel") or (character and character:FindFirstChild("DiamondShovel"))
-			if not diamondTool then
-				for _, item in ipairs(backpack:GetChildren()) do
-					if item:IsA("Tool") and (string.find(item.Name:lower(), "shovel") or item:GetAttribute("ShovelId") ~= nil) then
-						diamondTool = item
+			local targetTool: Tool? = nil
+			-- Search Backpack
+			for _, item in ipairs(backpack:GetChildren()) do
+				if item:IsA("Tool") and (item:GetAttribute("ShovelId") == shovelId or item.Name == shovelId or item:GetAttribute("DigPalsShovelTool") == true) then
+					targetTool = item
+					break
+				end
+			end
+			-- Search Character
+			if not targetTool and character then
+				for _, item in ipairs(character:GetChildren()) do
+					if item:IsA("Tool") and (item:GetAttribute("ShovelId") == shovelId or item.Name == shovelId or item:GetAttribute("DigPalsShovelTool") == true) then
+						targetTool = item
 						break
 					end
 				end
 			end
 
-			if diamondTool and diamondTool:IsA("Tool") and diamondTool.Parent == backpack then
+			if targetTool and targetTool:IsA("Tool") and targetTool.Parent == backpack then
 				pcall(function()
-					humanoid:EquipTool(diamondTool)
+					humanoid:EquipTool(targetTool)
 				end)
 			end
 		end
-
-		pcall(function()
-			local Shared = ReplicatedStorage:FindFirstChild("Shared")
-			local RemotesUtil = Shared and Shared:FindFirstChild("Util") and Shared.Util:FindFirstChild("Remotes")
-			if RemotesUtil then
-				local Remotes = require(RemotesUtil) :: any
-				local equipEv = Remotes.GetEvent("EquipShovel")
-				if equipEv then
-					equipEv:FireServer("DiamondShovel")
-				end
-			end
-		end)
 	end
 
 	if onSlotSelectedHook then
@@ -200,7 +317,7 @@ end
 -- ============================================================================
 -- 4. RESPONSIVE UISCALE MANAGEMENT & RESILIENT UI RESOLVER
 -- ============================================================================
-local function resolveUI()
+function resolveUI()
 	local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
 	if not playerGui then
 		return
@@ -215,6 +332,42 @@ local function resolveUI()
 		hotbarContainer = gui:FindFirstChild("HotbarContainer") :: Frame?
 		if hotbarContainer then
 			hotbarScale = hotbarContainer:FindFirstChild("HotbarScale") :: UIScale?
+		end
+	end
+
+	if hotbarContainer then
+		for slotNum = 1, 3 do
+			if not slotComponentsByNumber[slotNum] or not slotComponentsByNumber[slotNum].Button.Parent then
+				local btn = hotbarContainer:FindFirstChild("Slot" .. slotNum .. "_EquippedShovel")
+					or hotbarContainer:FindFirstChild("Slot" .. slotNum .. "_DiamondShovel")
+					or hotbarContainer:FindFirstChild("Slot" .. slotNum .. "_Shovel")
+					or hotbarContainer:FindFirstChild("Slot" .. slotNum .. "_Items")
+				if btn and btn:IsA("ImageButton") then
+					local stroke = btn:FindFirstChildOfClass("UIStroke")
+					local grad = btn:FindFirstChildOfClass("UIGradient")
+					local glow = btn:FindFirstChild("SelectionGlow") :: Frame?
+					local glowStroke = glow and glow:FindFirstChildOfClass("UIStroke")
+					local badge = btn:FindFirstChild("NumberBadge") :: Frame?
+					local badgeLbl = badge and badge:FindFirstChild("BadgeNumber") :: TextLabel?
+					local icon = btn:FindFirstChild("SlotIcon") :: ImageLabel?
+					local nameLbl = btn:FindFirstChild("SlotName") :: TextLabel?
+					local nameStroke = nameLbl and nameLbl:FindFirstChildOfClass("UIStroke")
+					if stroke and grad and badge and badgeLbl and icon and nameLbl and nameStroke then
+						slotComponentsByNumber[slotNum] = {
+							Button = btn,
+							Stroke = stroke,
+							GlowStroke = glowStroke,
+							GlowFrame = glow,
+							BgGradient = grad,
+							BadgeFrame = badge,
+							BadgeLabel = badgeLbl,
+							Icon = icon,
+							NameLabel = nameLbl,
+							NameStroke = nameStroke,
+						}
+					end
+				end
+			end
 		end
 	end
 
@@ -583,14 +736,21 @@ local function buildDigPalsUI()
 	hbLayout.Parent = hotbar
 
 	-- Define 3 Slot Configurations
+	local initialShovelId = LocalPlayer:GetAttribute("EquippedShovel") or "RustyShovel"
+	if typeof(initialShovelId) ~= "string" or initialShovelId == "" then
+		initialShovelId = "RustyShovel"
+	end
+	currentEquippedShovelId = initialShovelId
+	local initialCfg = SHOVEL_CONFIGS[initialShovelId] or SHOVEL_CONFIGS.RustyShovel
+
 	local slotConfigs = {
 		[1] = {
-			Name = "Slot1_DiamondShovel",
+			Name = "Slot1_EquippedShovel",
 			Number = 1,
-			Title = "Diamond Shovel",
-			TitleColor = COLORS.TextDiamondShovel,
-			IconAsset = ASSETS.Hotbar.DiamondShovel,
-			IconSize = UDim2.fromOffset(140, 108),
+			Title = initialCfg.DisplayName,
+			TitleColor = initialCfg.TextColor,
+			IconAsset = initialCfg.Icon,
+			IconSize = UDim2.fromOffset(136, 108),
 			IconPos = UDim2.new(0.5, 0, 0.42, 0),
 		},
 		[2] = {
@@ -598,8 +758,8 @@ local function buildDigPalsUI()
 			Number = 2,
 			Title = "Shovel",
 			TitleColor = COLORS.TextShovel,
-			IconAsset = ASSETS.Hotbar.Shovel,
-			IconSize = UDim2.fromOffset(124, 104),
+			IconAsset = ASSETS.Hotbar.ShovelSilhouette,
+			IconSize = UDim2.fromOffset(128, 108),
 			IconPos = UDim2.new(0.5, 0, 0.44, 0),
 		},
 		[3] = {
@@ -607,8 +767,8 @@ local function buildDigPalsUI()
 			Number = 3,
 			Title = "Items",
 			TitleColor = COLORS.TextItems,
-			IconAsset = ASSETS.Hotbar.Backpack,
-			IconSize = UDim2.fromOffset(116, 102),
+			IconAsset = ASSETS.Hotbar.BackpackSilhouette,
+			IconSize = UDim2.fromOffset(120, 106),
 			IconPos = UDim2.new(0.5, 0, 0.44, 0),
 		},
 	}
@@ -712,10 +872,12 @@ local function buildDigPalsUI()
 		nameLbl.Name = "SlotName"
 		nameLbl.AnchorPoint = Vector2.new(0.5, 1)
 		nameLbl.Position = UDim2.new(0.5, 0, 1, -12)
-		nameLbl.Size = UDim2.new(1, -16, 0, 32)
+		nameLbl.Size = UDim2.new(1, -8, 0, 32)
 		nameLbl.BackgroundTransparency = 1
 		nameLbl.Font = Enum.Font.GothamBlack
-		nameLbl.TextSize = if slotNum == 1 then 20 else 23
+		nameLbl.TextSize = if slotNum == 1 then 18 else 23
+		nameLbl.TextWrapped = false
+		nameLbl.TextTruncate = Enum.TextTruncate.None
 		nameLbl.TextColor3 = cfg.TitleColor
 		nameLbl.Text = cfg.Title
 		nameLbl.ZIndex = 14
@@ -1154,6 +1316,33 @@ function InventoryController.Start()
 
 	buildDigPalsUI()
 	bindInputEvents()
+
+	-- Attribute change listener for dynamic shovel synchronization
+	local function onShovelAttrChanged()
+		local eq = LocalPlayer:GetAttribute("EquippedShovel")
+		if typeof(eq) == "string" and eq ~= "" then
+			InventoryController.SyncEquippedShovel(eq)
+		end
+	end
+	LocalPlayer:GetAttributeChangedSignal("EquippedShovel"):Connect(onShovelAttrChanged)
+	onShovelAttrChanged()
+
+	-- StateSync listener to keep hotbar in sync with server state
+	pcall(function()
+		local Shared = ReplicatedStorage:FindFirstChild("Shared")
+		local RemotesUtil = Shared and Shared:FindFirstChild("Util") and Shared.Util:FindFirstChild("Remotes")
+		if RemotesUtil then
+			local Remotes = require(RemotesUtil) :: any
+			local syncEv = Remotes.GetEvent("StateSync")
+			if syncEv then
+				syncEv.OnClientEvent:Connect(function(snapshot: any)
+					if snapshot and type(snapshot.EquippedShovel) == "string" then
+						InventoryController.SyncEquippedShovel(snapshot.EquippedShovel)
+					end
+				end)
+			end
+		end
+	end)
 
 	-- Viewport size change listener for responsive scaling
 	local function hookCamera()

@@ -120,61 +120,6 @@ function ShopService.BuyShovelInProfile(
 	}
 end
 
-local function createShovelShopBillboard(parent: BasePart, studOffset: Vector3)
-	local existing = parent:FindFirstChild("ShovelShopSignGui")
-	if existing then
-		existing:Destroy()
-	end
-
-	local bb = Instance.new("BillboardGui")
-	bb.Name = "ShovelShopSignGui"
-	bb.Adornee = parent
-	bb.Size = UDim2.fromOffset(208, 50)
-	bb.StudsOffset = studOffset
-	bb.AlwaysOnTop = false
-	bb.MaxDistance = 65
-	bb.Parent = parent
-
-	local bg = Instance.new("Frame")
-	bg.Name = "Card"
-	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(20, 30, 44)
-	bg.BackgroundTransparency = 0.10
-	bg.BorderSizePixel = 0
-	bg.Parent = bb
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = bg
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(82, 204, 255)
-	stroke.Thickness = 1.8
-	stroke.Parent = bg
-
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.Position = UDim2.fromOffset(6, 4)
-	title.Size = UDim2.new(1, -12, 0, 22)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 14
-	title.TextColor3 = Color3.fromRGB(108, 220, 255)
-	title.Text = "SHOVEL SHOP"
-	title.Parent = bg
-
-	local sub = Instance.new("TextLabel")
-	sub.Name = "Sub"
-	sub.Position = UDim2.fromOffset(6, 25)
-	sub.Size = UDim2.new(1, -12, 0, 18)
-	sub.BackgroundTransparency = 1
-	sub.Font = Enum.Font.GothamBold
-	sub.TextSize = 11
-	sub.TextColor3 = Color3.fromRGB(220, 232, 248)
-	sub.Text = "Beli & Pakai Sekop Baru"
-	sub.Parent = bg
-end
-
 local function attachShovelShopPrompt(anchorPart: BasePart, promptOffset: Vector3)
 	anchorPart:SetAttribute("DigPalsShovelShopNode", true)
 
