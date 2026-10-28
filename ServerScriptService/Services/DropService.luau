@@ -230,6 +230,10 @@ function DropService.ProcessClearedMound(
 					if drop.Rarity == "Rare" or drop.Rarity == "Epic" or drop.Rarity == "Legendary" then
 						QuestService.RecordProgress(player, "RareOrHigherItemFound", 1)
 					end
+					if drop.Rarity == "Legendary" then
+						local DebugService = require(script.Parent:WaitForChild("DebugService"))
+						DebugService.OnLegendaryObtained(player, mutableProfile, "Drop", drop.Id)
+					end
 				end
 			end
 		end)

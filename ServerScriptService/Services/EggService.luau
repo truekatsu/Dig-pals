@@ -471,11 +471,16 @@ function EggService.Start()
 			local IndexService = require(script.Parent:WaitForChild("IndexService"))
 			local QuestService = require(script.Parent:WaitForChild("QuestService"))
 			local TutorialService = require(script.Parent:WaitForChild("TutorialService"))
+			local DebugService = require(script.Parent:WaitForChild("DebugService"))
 			if result.Species then
 				local profile = PlayerState.Get(player)
 				if profile then
 					IndexService.RegisterPetDiscovery(player, profile, result.Species)
 					TutorialService.OnEggHatched(player, profile, result.Species)
+					DebugService.OnFirstHatch(player, profile, result.Species)
+					if result.Rarity == "Legendary" then
+						DebugService.OnLegendaryObtained(player, profile, "Egg", result.Species)
+					end
 				end
 			end
 			QuestService.RecordProgress(player, "EggHatched", 1)

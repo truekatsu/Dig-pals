@@ -416,7 +416,7 @@ function TutorialService.Start()
 		return TutorialService.UnlockSandyGate(player)
 	end)
 
-	Remotes.GetEvent("AdvanceTutorial").OnServerEvent:Connect(function(player: Player, step: any)
+	Remotes.OnServerEvent("AdvanceTutorial", function(player: Player, step: any)
 		if type(step) == "number" then
 			if step >= 5 then
 				TutorialService.CompleteTutorial(player)

@@ -155,6 +155,11 @@ export type PlayerProfile = {
 		Week: number,
 		Coins: number,
 	}?,
+	CreatedAt: number?,
+	TotalPlayTime: number?,
+	FirstHatchTime: number?,
+	IronShovelTime: number?,
+	LegendaryCount: number?,
 	LastSeen: number,
 }
 

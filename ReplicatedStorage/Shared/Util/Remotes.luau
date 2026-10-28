@@ -121,6 +121,14 @@ function Validators.Boolean(value: any): boolean
 	return type(value) == "boolean"
 end
 
+function Validators.Table(value: any): boolean
+	return type(value) == "table"
+end
+
+function Validators.Any(_value: any): boolean
+	return true
+end
+
 function Validators.Optional(inner: ValidatorFn): ValidatorFn
 	return function(value: any): boolean
 		if value == nil then
@@ -453,6 +461,14 @@ local Specs: { [string]: RemoteSpec } = {
 		RateLimitPerSecond = DEFAULT_RATE_LIMIT,
 		Validators = {},
 		Description = "Server -> Client: Synchronizes profile data for client UI panels.",
+	},
+	DebugAction = {
+		Name = "DebugAction",
+		Kind = "RemoteFunction",
+		Direction = "ClientToServer",
+		RateLimitPerSecond = 10,
+		Validators = { Validators.String, Validators.Optional(Validators.Any) },
+		Description = "Client -> Server: Executes privileged debug action for owner in Studio/testing.",
 	},
 }
 

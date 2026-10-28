@@ -35,6 +35,7 @@ local IndexService = require(ServicesFolder:WaitForChild("IndexService"))
 local QuestService = require(ServicesFolder:WaitForChild("QuestService"))
 local LeaderboardService = require(ServicesFolder:WaitForChild("LeaderboardService"))
 local TutorialService = require(ServicesFolder:WaitForChild("TutorialService"))
+local DebugService = require(ServicesFolder:WaitForChild("DebugService"))
 
 Remotes.EnsureAll()
 DataService.Start()
@@ -54,6 +55,7 @@ IndexService.Start()
 QuestService.Start()
 LeaderboardService.Start()
 TutorialService.Start()
+DebugService.Start()
 
 -- Step 1 automated verification
 local function runStep1Verification()
@@ -2241,6 +2243,167 @@ local function runStep14Verification()
 	print(string.format("[Step14Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
+-- Step 16 automated verification (Security Audit, Anti-Exploits, DebugService permissions, Telemetry)
+local function runStep16Verification()
+	local passed = 0
+	local failed = 0
+
+	local function verify(cond: boolean, label: string, detail: string?)
+		if cond then
+			passed += 1
+			print(string.format("[Step16Validator] PASS: %s", label))
+		else
+			failed += 1
+			warn(string.format("[Step16Validator] FAIL: %s (%s)", label, detail or "assertion failed"))
+		end
+	end
+
+	print("[Step16Validator] Starting Step 16 verification (Security, Anti-Exploits, DebugService, Telemetry)...")
+
+	-- 1. Audit Remotes: Rate Limiting and Violation Recording
+	local testAttackerId = -999001
+	local testAttackerName = "Attacker_1"
+	Remotes.ResetViolations(testAttackerId)
+
+	-- Test 1.1: Invalid arguments caught by validators
+	local badArgResult = Remotes.ValidateArgs(testAttackerId, testAttackerName, "SellItem", "Pebble", -5)
+	verify(badArgResult == false, "SellItem rejects negative item count via PositiveInt validator")
+
+	local badDirection = Remotes.ValidateArgs(testAttackerId, testAttackerName, "MoundSpawned", {})
+	verify(badDirection == false, "Client calling ServerToClient remote rejected with InvalidDirection")
+
+	-- Test 1.2: Violations recorded in summary
+	local vSummary = Remotes.GetViolationSummary(testAttackerId)
+	verify(vSummary.TotalCount >= 2, "Security violations properly recorded in user violation summary")
+
+	-- Test 1.3: Rate limit throttling
+	local throttledCount = 0
+	local nowClock = os.clock()
+	for _ = 1, 25 do
+		local allowed = Remotes.CheckRateLimit(testAttackerId, testAttackerName, "Strike", nowClock)
+		if not allowed then
+			throttledCount += 1
+		end
+	end
+	verify(throttledCount > 0, "Rapid request burst on Strike remote is throttled by token bucket rate limiter")
+
+	-- 2. Exploit Test: Spam Strike (Bypassing shovel DigSpeed cooldown) & Mound Griefing
+	local victimUser = -999002
+	local attackerUser = -999003
+	local victimOrigin = Vector3.new(0, 5, 0)
+	MoundService.ClearUserMounds(victimUser)
+	MoundService.ClearUserMounds(attackerUser)
+
+	local victimMound = MoundService.SpawnMoundForUser(victimUser, nil, victimOrigin, 100.0)
+	assert(victimMound, "victimMound must exist")
+
+	-- Attacker attempts to strike victim's personal mound
+	local stealStrikeResult = DigService.ExecuteStrike(attackerUser, nil, victimMound.Id, 100.0, victimMound.Position, 0.5)
+	verify(stealStrikeResult.Success == false and stealStrikeResult.Reason == "MoundNotFound", "Striking another player's personal mound rejected with MoundNotFound")
+	verify(victimMound.HP == victimMound.MaxHP, "Victim mound HP untouched after grief attempt")
+
+	-- Attacker attempts rapid spam on own mound
+	local attackerMound = MoundService.SpawnMoundForUser(attackerUser, nil, victimOrigin, 100.0)
+	assert(attackerMound, "attackerMound must exist")
+
+	local strike1 = DigService.ExecuteStrike(attackerUser, nil, attackerMound.Id, 100.0, attackerMound.Position, 0.5)
+	verify(strike1.Success == true, "First strike on owned mound succeeds")
+
+	local strike2Spam = DigService.ExecuteStrike(attackerUser, nil, attackerMound.Id, 100.05, attackerMound.Position, 0.5) -- 50ms later (cooldown is 1.0s)
+	verify(strike2Spam.Success == false and strike2Spam.Reason == "Cooldown", "Spam strike faster than DigSpeed cooldown rejected with Cooldown")
+
+	MoundService.ClearUserMounds(victimUser)
+	MoundService.ClearUserMounds(attackerUser)
+
+	-- 3. Exploit Test: Beli Saat Coin Kurang
+	local poorProfile = DataService.CreateDefaultProfile()
+	poorProfile.Coins = 100
+
+	-- 3.1 BuyShovel with insufficient coins
+	local buyShovelResult = ShopService.BuyShovelInProfile(poorProfile, "IronShovel", false)
+	verify(buyShovelResult.Success == false and buyShovelResult.Reason == "InsufficientCoins", "BuyShovel rejected with InsufficientCoins when coins < 2,500")
+	verify(poorProfile.Coins == 100, "Coins remain unmodified (100) after rejected purchase")
+	verify(not table.find(poorProfile.Shovels.Owned, "IronShovel"), "Iron Shovel not added to inventory")
+
+	-- 3.2 UpgradeBag with insufficient coins (Level 1 -> 2 costs 150)
+	local bagResult = InventoryService.UpgradeBagInProfile(poorProfile)
+	verify(bagResult.Success == false and bagResult.Reason == "InsufficientCoins", "UpgradeBag rejected with InsufficientCoins when coins < 150")
+
+	-- 3.3 UpgradeBase with insufficient coins (Level 1 -> 2 costs 500)
+	local baseResult = BaseService.UpgradeBaseInProfile(poorProfile)
+	verify(baseResult.Success == false and baseResult.Reason == "InsufficientCoins", "UpgradeBase rejected with InsufficientCoins when coins < 500")
+
+	-- 3.4 UnlockSandyGate with insufficient coins (costs 10,000)
+	table.insert(poorProfile.Shovels.Owned, "IronShovel")
+	poorProfile.Shovels.Equipped = "IronShovel"
+	local gateOk, gateReason = TutorialService.UnlockSandyGateForProfile(poorProfile)
+	verify(gateOk == false and gateReason == "NotEnoughCoins", "UnlockSandyGate rejected with NotEnoughCoins when coins (100) < 10,000")
+
+	-- 4. Exploit Test: Klaim Reward Berulang & Incomplete Quests
+	local questProfile = DataService.CreateDefaultProfile()
+	QuestService.EnsureProfileQuests(questProfile, 777123)
+	local firstQuest = questProfile.Quests.List[1]
+	assert(firstQuest, "firstQuest must exist")
+
+	-- Attempt claim incomplete quest (0 progress)
+	local incompleteClaim = QuestService.ClaimQuestForProfile(questProfile, 777123, firstQuest.Id)
+	verify(incompleteClaim.Success == false and incompleteClaim.ErrorReason == "TargetNotReached", "Claiming incomplete quest rejected with TargetNotReached")
+
+	-- Fulfill quest requirement
+	firstQuest.Progress = 999
+	local validClaim = QuestService.ClaimQuestForProfile(questProfile, 777123, firstQuest.Id)
+	verify(validClaim.Success == true, "Claiming fulfilled quest succeeds")
+	verify(firstQuest.Claimed == true, "Quest marked Claimed == true")
+	local coinsAfterClaim = questProfile.Coins
+
+	-- Double claim attempt
+	local doubleClaim = QuestService.ClaimQuestForProfile(questProfile, 777123, firstQuest.Id)
+	verify(doubleClaim.Success == false and doubleClaim.ErrorReason == "AlreadyClaimed", "Duplicate quest claim attempt rejected with AlreadyClaimed")
+	verify(questProfile.Coins == coinsAfterClaim, "Coins remain unchanged after duplicate claim attempt")
+
+	-- Double streak claim attempt
+	local streakProfile = DataService.CreateDefaultProfile()
+	local streak1 = QuestService.ClaimStreakForProfile(streakProfile)
+	verify(streak1.Success == true, "First streak claim succeeds")
+	local streak2 = QuestService.ClaimStreakForProfile(streakProfile)
+	verify(streak2.Success == false and streak2.ErrorReason == "AlreadyClaimedToday", "Double streak claim on same day rejected with AlreadyClaimedToday")
+
+	-- 5. Exploit Test: DebugService Permissions
+	local normalMockPlayer = { Name = "NormalPlayer", UserId = 999888777 } :: any
+	local ownerMockPlayer = { Name = "OwnerPlayer", UserId = 8535886514 } :: any -- Configured Owner in Economy.OwnerUserIds
+
+	verify(DebugService.IsAuthorized(normalMockPlayer) == false, "Normal player (UserId 999888777) denied DebugService authorization")
+	verify(DebugService.IsAuthorized(ownerMockPlayer) == true, "Owner player (UserId 8535886514) granted DebugService authorization")
+
+	-- Normal player calling debug actions
+	local unauthAddCoins = DebugService.AddCoins(normalMockPlayer, 50000)
+	verify(unauthAddCoins == false, "AddCoins rejected for non-owner player")
+
+	local unauthGivePet = DebugService.GivePet(normalMockPlayer, "TerraDragon", "Shiny")
+	verify(unauthGivePet == false, "GivePet rejected for non-owner player")
+
+	local unauthSkipInc = DebugService.SkipIncubator(normalMockPlayer, 1)
+	verify(unauthSkipInc == false, "SkipIncubator rejected for non-owner player")
+
+	-- 6. Telemetry Logging Verification
+	local teleProfile = DataService.CreateDefaultProfile()
+	teleProfile.CreatedAt = os.time() - 1800 -- Started 30 mins ago
+
+	DebugService.OnIronShovelAcquired(ownerMockPlayer, teleProfile)
+	verify(teleProfile.IronShovelTime ~= nil, "Telemetry records IronShovelTime upon acquiring Iron Shovel")
+
+	DebugService.OnFirstHatch(ownerMockPlayer, teleProfile, "Cat")
+	verify(teleProfile.FirstHatchTime ~= nil, "Telemetry records FirstHatchTime upon hatching first egg")
+
+	DebugService.OnLegendaryObtained(ownerMockPlayer, teleProfile, "Egg", "TerraDragon")
+	verify(teleProfile.LegendaryCount == 1, "Telemetry increments LegendaryCount for legendary pet hatch")
+
+	DebugService.OnLegendaryObtained(ownerMockPlayer, teleProfile, "Drop", "ObsidianGeode")
+	verify(teleProfile.LegendaryCount == 2, "Telemetry increments LegendaryCount for legendary drop")
+
+	print(string.format("[Step16Validator] SUMMARY: %d passed, %d failed.", passed, failed))
+end
+
 task.spawn(function()
 	runStep1Verification()
 	runStep2Verification()
@@ -2257,4 +2420,5 @@ task.spawn(function()
 	runStep12Verification()
 	runStep13Verification()
 	runStep14Verification()
+	runStep16Verification()
 end)

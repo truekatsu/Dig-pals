@@ -291,6 +291,14 @@ function ShopService.BuyShovel(
 	if result.Success then
 		ShovelInventoryService.SetToolActive(player, true)
 		DataService.SavePlayer(player)
+
+		if shovelId == "IronShovel" then
+			local DebugService = require(script.Parent:WaitForChild("DebugService"))
+			local prof = PlayerState.Get(player)
+			if prof then
+				DebugService.OnIronShovelAcquired(player, prof)
+			end
+		end
 	end
 
 	return result

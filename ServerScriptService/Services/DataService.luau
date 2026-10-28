@@ -93,6 +93,9 @@ function DataService.CreateDefaultProfile(): Types.PlayerProfile
 			Week = 0,
 			Coins = 0,
 		},
+		CreatedAt = os.time(),
+		TotalPlayTime = 0,
+		LegendaryCount = 0,
 		LastSeen = os.time(),
 	}
 end
