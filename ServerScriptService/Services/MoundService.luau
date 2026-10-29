@@ -23,6 +23,7 @@ export type MoundInstance = {
 	PerfectCount: number,
 	GoodCount: number,
 	MissCount: number,
+	DigFailed: boolean?,
 }
 
 local MoundService = {}
@@ -342,6 +343,17 @@ function MoundService.SpawnMoundForUser(
 	end
 
 	local chosenSize = Weighted.Pick(MoundsConfig.SizeWeights, rng) :: Types.MoundSizeName
+	-- Guarantee a diggable small target for the first objective. Other spawns keep normal weights.
+	if player and player:GetAttribute("TutorialStep") == 1 and player:GetAttribute("TutorialDone") ~= true then
+		local hasSmall = false
+		for _, activeMound in ensureUserTable(userId) do
+			if activeMound.Size == "Small" and activeMound.HP > 0 then
+				hasSmall = true
+				break
+			end
+		end
+		if not hasSmall then chosenSize = "Small" end
+	end
 	local sizeConfig = MoundsConfig.Sizes[chosenSize] or MoundsConfig.Sizes.Small
 	local now = nowTimestamp or os.time()
 	local moundId = "Mound_" .. HttpService:GenerateGUID(false)

@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Util"):WaitForChild("Types"))
 local Weighted = require(Shared:WaitForChild("Util"):WaitForChild("Weighted"))
+local DigTiming = require(Shared:WaitForChild("Util"):WaitForChild("DigTiming"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"))
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
@@ -23,6 +24,7 @@ export type StrikeSession = {
 	MoundId: string,
 	StartTime: number,
 	LastStrikeTime: number,
+	Attempt: DigTiming.Attempt,
 }
 
 export type StrikeOutcome = {
@@ -112,9 +114,6 @@ function DigService.StartSession(
 
 	local now = serverNowOverride or workspace:GetServerTimeNow()
 	local existing = activeSessionsByUserId[userId]
-	if existing and existing.MoundId == moundId then
-		return true, nil, existing
-	end
 
 	-- Step 6: Block starting a NEW mound when Item Bag is full; an already active mound above continues freely
 	if player and InventoryService.IsPlayerBagFull(player) then
@@ -140,12 +139,15 @@ function DigService.StartSession(
 		end
 	end
 
+	local shovel = getEquippedShovelConfig(player)
 	local session: StrikeSession = {
 		UserId = userId,
 		MoundId = moundId,
 		StartTime = now,
 		LastStrikeTime = if existing then existing.LastStrikeTime else 0,
+		Attempt = DigTiming.New(shovel.Id, mound.Size, now, mound.MissCount),
 	}
+	mound.DigFailed = false
 	activeSessionsByUserId[userId] = session
 	MoundService.TouchMound(userId, moundId)
 
@@ -158,10 +160,11 @@ function DigService.StartSession(
 			MoundId = moundId,
 			MoundSize = mound.Size,
 			StartTime = session.StartTime,
-			Speed = sizeConfig.Timing.Speed,
+			Speed = session.Attempt.Speed,
 			GoodWidth = sizeConfig.Timing.GoodWidth,
 			PerfectWidth = sizeConfig.Timing.PerfectWidth,
 			Cooldown = shovel.DigSpeed,
+			Minigame = session.Attempt,
 		})
 	end
 
@@ -215,6 +218,7 @@ function DigService.ExecuteStrike(
 	local serverNow = serverNowOverride or workspace:GetServerTimeNow()
 	local session = activeSessionsByUserId[userId]
 	if not session or session.MoundId ~= moundId then
+		if player then return { Success = false, Reason = "SessionRequired" } end
 		local okStart, errReason, createdSession = DigService.StartSession(userId, player, moundId, serverNow, playerPos)
 		if not okStart or not createdSession then
 			return {
@@ -224,8 +228,10 @@ function DigService.ExecuteStrike(
 		end
 		session = createdSession
 	end
+	if session.Attempt.Failed then return { Success = false, Reason = "DigFailed" } end
 
 	local shovel = getEquippedShovelConfig(player, profileOverride)
+	if session.Attempt.ShovelId ~= shovel.Id then return { Success = false, Reason = "ShovelChanged" } end
 	if player and player.Parent == Players then
 		if not ShovelInventoryService.IsShovelHeld(player) then
 			return {
@@ -242,7 +248,7 @@ function DigService.ExecuteStrike(
 	end
 
 	local sizeConfig = MoundsConfig.Sizes[mound.Size] or MoundsConfig.Sizes.Small
-	local timing = sizeConfig.Timing
+	local timing = session.Attempt
 	local elapsed = math.max(0, serverNow - session.StartTime)
 	local tolerance = if latencyToleranceOverride ~= nil
 		then latencyToleranceOverride
@@ -253,10 +259,11 @@ function DigService.ExecuteStrike(
 		timing.Speed,
 		timing.GoodWidth,
 		timing.PerfectWidth,
-		tolerance
+		tolerance,
+		timing.ZoneCenter
 	)
 
-	local multiplier = (MoundsConfig.StrikeDamageMultipliers :: any)[grade] or 0.25
+	local multiplier = (MoundsConfig.StrikeDamageMultipliers :: any)[grade] or 0
 	local damage = shovel.Power * multiplier
 
 	local QuestService = require(script.Parent:WaitForChild("QuestService"))
@@ -280,6 +287,21 @@ function DigService.ExecuteStrike(
 	end
 
 	session.LastStrikeTime = serverNow
+	if DigTiming.RecordStrike(session.Attempt, grade) then
+		mound.HP = mound.MaxHP
+		mound.PerfectCount, mound.GoodCount, mound.MissCount = 0, 0, 0
+		mound.DigFailed = true
+		MoundService.TouchMound(userId, moundId)
+		if player and player.Parent == Players then
+			ShovelInventoryService.PlayStrikeSwing(player)
+			Remotes.GetEvent("MoundUpdated"):FireClient(player, mound.Id, mound.HP, mound.MaxHP)
+			Remotes.GetEvent("StrikeResult"):FireClient(player, {
+				Event = "DigFailed", MoundId = mound.Id, RemainingHP = mound.HP,
+				MaxHP = mound.MaxHP, Minigame = session.Attempt,
+			})
+		end
+		return { Success = true, Failed = true, Grade = grade, Damage = 0, RemainingHP = mound.HP, MaxHP = mound.MaxHP, Cleared = false }
+	end
 	mound.HP = math.max(0, mound.HP - damage)
 	MoundService.TouchMound(userId, moundId)
 
@@ -313,6 +335,7 @@ function DigService.ExecuteStrike(
 			Cleared = cleared,
 			Cooldown = shovel.DigSpeed,
 			NextStrikeAllowedAt = serverNow + shovel.DigSpeed,
+			Minigame = session.Attempt,
 		})
 	end
 
@@ -349,7 +372,7 @@ function DigService.ApplyPetDamage(
 	end
 
 	local mound = MoundService.GetMound(userId, moundId)
-	if not mound then
+	if not mound or mound.DigFailed then
 		return false, 0, false
 	end
 
@@ -403,7 +426,10 @@ function DigService.Start()
 	started = true
 
 	Remotes.OnServerEvent("StartDig", function(player: Player, moundId: string)
-		DigService.StartSession(player.UserId, player, moundId)
+		local ok, reason = DigService.StartSession(player.UserId, player, moundId)
+		if not ok then
+			Remotes.GetEvent("StrikeResult"):FireClient(player, { Event = "Rejected", MoundId = moundId, Reason = reason })
+		end
 	end)
 
 	Remotes.OnServerEvent("CancelDig", function(player: Player)
@@ -411,7 +437,10 @@ function DigService.Start()
 	end)
 
 	Remotes.OnServerEvent("Strike", function(player: Player, moundId: string)
-		DigService.ExecuteStrike(player.UserId, player, moundId)
+		local result = DigService.ExecuteStrike(player.UserId, player, moundId)
+		if not result.Success then
+			Remotes.GetEvent("StrikeResult"):FireClient(player, { Event = "Rejected", MoundId = moundId, Reason = result.Reason })
+		end
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)

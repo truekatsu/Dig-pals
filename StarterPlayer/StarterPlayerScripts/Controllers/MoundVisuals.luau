@@ -134,6 +134,32 @@ function MoundVisuals.IsSharedMound(moundId: string): boolean
 	return entry ~= nil and (entry.Model:GetAttribute("IsShared") == true or entry.Size == "Shared")
 end
 
+-- Use the live dig registry, never map decoration. Keep a valid target locked.
+function MoundVisuals.GetTutorialMound(position: Vector3, preferredId: string?): (string?, Model?, Vector3?)
+	local function isEligible(entry: MoundVisualEntry): boolean
+		return entry.Size == "Small" and entry.LastHP > 0
+			and entry.Model:GetAttribute("IsShared") ~= true
+			and entry.Model:IsDescendantOf(workspace)
+			and entry.PrimaryPart.Parent == entry.Model
+	end
+	local preferred = if preferredId then activeVisuals[preferredId] else nil
+	if preferred and isEligible(preferred) then
+		return preferred.Id, preferred.Model, preferred.PrimaryPart.Position
+	end
+	local nearest: MoundVisualEntry? = nil
+	local distance = math.huge
+	for _, entry in activeVisuals do
+		if isEligible(entry) then
+			local candidateDistance = (entry.PrimaryPart.Position - position).Magnitude
+			if candidateDistance < distance then
+				nearest, distance = entry, candidateDistance
+			end
+		end
+	end
+	if nearest then return nearest.Id, nearest.Model, nearest.PrimaryPart.Position end
+	return nil, nil, nil
+end
+
 local function createBillboard(
 	parentPart: Part,
 	titleText: string,

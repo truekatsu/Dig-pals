@@ -14,6 +14,7 @@ local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local AssetIds = require(Shared:WaitForChild("AssetIds"))
 local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"))
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
+local DigTiming = require(Shared:WaitForChild("Util"):WaitForChild("DigTiming"))
 
 local MoundVisuals = require(script.Parent:WaitForChild("MoundVisuals"))
 local InventoryController = require(script.Parent:WaitForChild("InventoryController"))
@@ -38,6 +39,11 @@ local goodWidth: number = MoundsConfig.Sizes.Small.Timing.GoodWidth
 local perfectWidth: number = MoundsConfig.Sizes.Small.Timing.PerfectWidth
 local nextAllowedStrikeTime: number = 0
 local feedbackVersion: number = 0
+local zoneCenter = 0.5
+local misses = 0
+local maxMisses = 3
+local sessionReady = false
+local awaitingStrike = false
 local started = false
 
 -- UI references
@@ -50,6 +56,16 @@ local indicatorFrame: Frame? = nil
 local digButton: TextButton? = nil
 local feedbackLabel: TextLabel? = nil
 local hintToastLabel: TextLabel? = nil
+local resolveFill: Frame? = nil
+local resolveHeart: TextLabel? = nil
+local resolveLabel: TextLabel? = nil
+
+local function updateResolve()
+	local ratio = math.clamp(1 - misses / maxMisses, 0, 1)
+	if resolveFill then resolveFill.Size = UDim2.fromScale(ratio, 1) end
+	if resolveHeart then resolveHeart.Position = UDim2.fromScale(ratio, 0.5) end
+	if resolveLabel then resolveLabel.Text = string.format("%d MISS TERSISA", math.max(0, maxMisses - misses)) end
+end
 
 local function isAnyModalOpen(): boolean
 	return InputController.IsAnyModalOpen()
@@ -97,10 +113,19 @@ local function updateZoneLayout()
 		return
 	end
 	goodZoneFrame.Size = UDim2.fromScale(goodWidth, 1)
-	goodZoneFrame.Position = UDim2.fromScale(0.5 - (goodWidth * 0.5), 0)
+	goodZoneFrame.Position = UDim2.fromScale(zoneCenter - (goodWidth * 0.5), 0)
 
 	perfectZoneFrame.Size = UDim2.fromScale(perfectWidth, 1)
-	perfectZoneFrame.Position = UDim2.fromScale(0.5 - (perfectWidth * 0.5), 0)
+	perfectZoneFrame.Position = UDim2.fromScale(zoneCenter - (perfectWidth * 0.5), 0)
+end
+
+local function applyMinigame(state: any)
+	if type(state) ~= "table" then return end
+	sessionStartTime = state.StartTime
+	barSpeed, goodWidth, perfectWidth = state.Speed, state.GoodWidth, state.PerfectWidth
+	zoneCenter, misses, maxMisses = state.ZoneCenter, state.Misses, state.MaxMisses
+	updateZoneLayout()
+	updateResolve()
 end
 
 local function applyMoundTimingConfig(sizeName: string)
@@ -216,6 +241,7 @@ local function unbindMinigameControls()
 end
 
 function DigController.StopMinigame(notifyServer: boolean)
+	sessionReady, awaitingStrike = false, false
 	MoundVisuals.SetDiggingMound(nil)
 	bagFullLockedMoundId = nil
 	if not activeMoundId then
@@ -295,10 +321,13 @@ function DigController.StartMinigameOnMound(moundId: string, moundSize: string, 
 
 	bagFullLockedMoundId = nil
 	activeMoundId = moundId
+	sessionReady, awaitingStrike = false, false
 	MoundVisuals.SetDiggingMound(nil)
 	activeMoundSize = moundSize
 	sessionStartTime = workspace:GetServerTimeNow()
 	applyMoundTimingConfig(moundSize)
+	local equipped = LocalPlayer:GetAttribute("EquippedShovel")
+	applyMinigame(DigTiming.New(if type(equipped) == "string" then equipped else "RustyShovel", moundSize, sessionStartTime))
 	MoundVisuals.SetSelectedMound(moundId)
 	bindMinigameControls()
 
@@ -321,7 +350,7 @@ function DigController.StartMinigameOnMound(moundId: string, moundSize: string, 
 end
 
 function DigController.AttemptStrike()
-	if not activeMoundId or isAnyModalOpen() then
+	if not activeMoundId or not sessionReady or awaitingStrike or isAnyModalOpen() then
 		return
 	end
 
@@ -335,6 +364,7 @@ function DigController.AttemptStrike()
 		return
 	end
 	nextAllowedStrikeTime = serverNow + getEquippedShovelCooldown()
+	awaitingStrike = true
 	Remotes.GetEvent("Strike"):FireServer(activeMoundId)
 end
 
@@ -347,7 +377,7 @@ local function showStrikeFeedback(grade: string, damage: number)
 	local currentVersion = feedbackVersion
 
 	local color = AssetIds.Colors.ZoneMiss
-	local labelText = string.format("MISS (-%.1f HP)", damage)
+	local labelText = "MISS!"
 	if grade == "Perfect" then
 		color = AssetIds.Colors.ZonePerfect
 		labelText = string.format("PERFECT! (-%d HP)", math.floor(damage))
@@ -361,7 +391,7 @@ local function showStrikeFeedback(grade: string, damage: number)
 	feedbackLabel.TextColor3 = color
 	feedbackLabel.Text = labelText
 	feedbackLabel.TextTransparency = 0
-	feedbackLabel.BackgroundTransparency = 0.25
+	feedbackLabel.BackgroundTransparency = 1
 
 	task.delay(0.75, function()
 		if feedbackVersion == currentVersion and feedbackLabel then
@@ -376,14 +406,10 @@ end
 local function createDigUI()
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	local existing = playerGui:FindFirstChild("DigTimingGui")
-	if existing and existing:IsA("ScreenGui") then
-		existing:Destroy()
-	end
-
+	if existing then existing:Destroy() end
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "DigTimingGui"
 	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = playerGui
 	screenGui = gui
@@ -391,99 +417,76 @@ local function createDigUI()
 	local toast = Instance.new("TextLabel")
 	toast.Name = "HintToast"
 	toast.AnchorPoint = Vector2.new(0.5, 1)
-	toast.Position = UDim2.new(0.5, 0, 1, -242)
-	toast.Size = UDim2.fromOffset(330, 32)
+	toast.Position = UDim2.new(0.5, 0, 1, -268)
+	toast.Size = UDim2.new(0.9, 0, 0, 32)
 	toast.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 	toast.BackgroundTransparency = 1
 	toast.Font = Enum.Font.GothamBold
-	toast.TextSize = 14
+	toast.TextSize = 15
 	toast.TextColor3 = Color3.fromRGB(255, 225, 130)
+	toast.TextStrokeTransparency = 0
 	toast.TextTransparency = 1
 	toast.Text = ""
 	toast.Parent = gui
 	hintToastLabel = toast
 
-	local toastCorner = Instance.new("UICorner")
-	toastCorner.CornerRadius = UDim.new(0, 8)
-	toastCorner.Parent = toast
-
 	local container = Instance.new("Frame")
 	container.Name = "DigContainer"
 	container.AnchorPoint = Vector2.new(0.5, 1)
-	container.Position = UDim2.new(0.5, 0, 1, -98)
-	container.Size = UDim2.fromOffset(320, 134)
+	container.Position = UDim2.new(0.5, 0, 1, -104)
+	container.Size = UDim2.new(0.84, 0, 0, 154)
 	container.BackgroundTransparency = 1
 	container.Visible = false
 	container.Parent = gui
 	hudContainer = container
-
-	local scaleInst = Instance.new("UIScale")
-	scaleInst.Parent = container
-	local function updateResponsiveScale()
-		local cam = workspace.CurrentCamera
-		if not cam then
-			return
-		end
-		local vp = cam.ViewportSize
-		local scale = math.min(vp.X / 720, vp.Y / 540)
-		scaleInst.Scale = math.clamp(scale, 0.7, 1.0)
-	end
-	updateResponsiveScale()
-	local cam = workspace.CurrentCamera
-	if cam then
-		cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
-	end
+	local limit = Instance.new("UISizeConstraint")
+	limit.MaxSize = Vector2.new(920, 154)
+	limit.Parent = container
 
 	local feedback = Instance.new("TextLabel")
 	feedback.Name = "FeedbackLabel"
 	feedback.AnchorPoint = Vector2.new(0.5, 0)
 	feedback.Position = UDim2.fromScale(0.5, 0)
-	feedback.Size = UDim2.fromOffset(290, 28)
-	feedback.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+	feedback.Size = UDim2.new(1, 0, 0, 26)
 	feedback.BackgroundTransparency = 1
 	feedback.Font = Enum.Font.GothamBlack
-	feedback.TextSize = 15
-	feedback.TextColor3 = Color3.fromRGB(255, 255, 255)
-	feedback.TextStrokeTransparency = 0.2
+	feedback.TextSize = 18
+	feedback.TextColor3 = Color3.new(1, 1, 1)
+	feedback.TextStrokeTransparency = 0
 	feedback.Text = ""
 	feedback.Visible = false
 	feedback.Parent = container
 	feedbackLabel = feedback
 
-	local fbCorner = Instance.new("UICorner")
-	fbCorner.CornerRadius = UDim.new(0, 8)
-	fbCorner.Parent = feedback
-
 	local track = Instance.new("Frame")
 	track.Name = "TimingBarTrack"
-	track.AnchorPoint = Vector2.new(0.5, 0)
-	track.Position = UDim2.new(0.5, 0, 0, 36)
-	track.Size = UDim2.fromOffset(290, 26)
-	track.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+	track.Position = UDim2.fromOffset(0, 36)
+	track.Size = UDim2.new(1, 0, 0, 58)
+	track.BackgroundColor3 = Color3.fromRGB(13, 13, 15)
+	track.BackgroundTransparency = 0.08
 	track.BorderSizePixel = 0
 	track.Parent = container
 	timingBarTrack = track
-
-	local trackCorner = Instance.new("UICorner")
-	trackCorner.CornerRadius = UDim.new(0, 8)
-	trackCorner.Parent = track
-
-	local trackStroke = Instance.new("UIStroke")
-	trackStroke.Color = Color3.fromRGB(210, 210, 225)
-	trackStroke.Thickness = 2
-	trackStroke.Parent = track
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = track
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(93, 96, 93)
+	stroke.Thickness = 2
+	stroke.Parent = track
 
 	local goodZone = Instance.new("Frame")
 	goodZone.Name = "GoodZone"
-	goodZone.BackgroundColor3 = AssetIds.Colors.ZoneGood
+	goodZone.BackgroundColor3 = Color3.fromRGB(105, 95, 60)
+	goodZone.BackgroundTransparency = 0.32
 	goodZone.BorderSizePixel = 0
 	goodZone.ZIndex = 2
 	goodZone.Parent = track
 	goodZoneFrame = goodZone
-
 	local perfectZone = Instance.new("Frame")
 	perfectZone.Name = "PerfectZone"
-	perfectZone.BackgroundColor3 = AssetIds.Colors.ZonePerfect
+	perfectZone.BackgroundColor3 = Color3.fromRGB(228, 196, 99)
+	perfectZone.BackgroundTransparency = 0.16
 	perfectZone.BorderSizePixel = 0
 	perfectZone.ZIndex = 3
 	perfectZone.Parent = track
@@ -492,52 +495,99 @@ local function createDigUI()
 	local indicator = Instance.new("Frame")
 	indicator.Name = "Indicator"
 	indicator.AnchorPoint = Vector2.new(0.5, 0.5)
-	indicator.Position = UDim2.fromScale(0.5, 0.5)
-	indicator.Size = UDim2.fromOffset(6, 34)
-	indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	indicator.Position = UDim2.fromScale(0, 0.5)
+	indicator.Size = UDim2.fromOffset(10, 76)
+	indicator.BackgroundColor3 = Color3.fromRGB(224, 236, 233)
 	indicator.BorderSizePixel = 0
 	indicator.ZIndex = 5
 	indicator.Parent = track
 	indicatorFrame = indicator
-
 	local indCorner = Instance.new("UICorner")
-	indCorner.CornerRadius = UDim.new(0, 3)
+	indCorner.CornerRadius = UDim.new(1, 0)
 	indCorner.Parent = indicator
+	local indStroke = Instance.new("UIStroke")
+	indStroke.Color = Color3.fromRGB(32, 39, 37)
+	indStroke.Thickness = 2
+	indStroke.Parent = indicator
 
+	local rail = Instance.new("Frame")
+	rail.Name = "ResolveTrack"
+	rail.Position = UDim2.new(0, 12, 0, 115)
+	rail.Size = UDim2.new(1, -24, 0, 8)
+	rail.BackgroundColor3 = Color3.fromRGB(23, 23, 25)
+	rail.BorderSizePixel = 0
+	rail.Parent = container
+	local railCorner = Instance.new("UICorner")
+	railCorner.CornerRadius = UDim.new(1, 0)
+	railCorner.Parent = rail
+	local fill = Instance.new("Frame")
+	fill.Name = "ResolveFill"
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = Color3.fromRGB(213, 66, 70)
+	fill.BorderSizePixel = 0
+	fill.Parent = rail
+	resolveFill = fill
+	local fillCorner = railCorner:Clone()
+	fillCorner.Parent = fill
+	local heart = Instance.new("TextLabel")
+	heart.Name = "ResolveHeart"
+	heart.AnchorPoint = Vector2.new(0.5, 0.5)
+	heart.Size = UDim2.fromOffset(36, 36)
+	heart.BackgroundTransparency = 1
+	heart.Font = Enum.Font.GothamBlack
+	heart.Text = "♥"
+	heart.TextSize = 34
+	heart.TextColor3 = Color3.fromRGB(255, 76, 82)
+	heart.TextStrokeTransparency = 0.35
+	heart.ZIndex = 4
+	heart.Parent = rail
+	resolveHeart = heart
+	local remaining = Instance.new("TextLabel")
+	remaining.Name = "MissesLeft"
+	remaining.Position = UDim2.fromOffset(0, 136)
+	remaining.Size = UDim2.new(0.5, 0, 0, 18)
+	remaining.BackgroundTransparency = 1
+	remaining.Font = Enum.Font.GothamBold
+	remaining.TextSize = 11
+	remaining.TextColor3 = Color3.fromRGB(255, 176, 178)
+	remaining.TextStrokeTransparency = 0
+	remaining.TextXAlignment = Enum.TextXAlignment.Left
+	remaining.Parent = container
+	resolveLabel = remaining
+
+	-- The whole wide bar is the touch/mouse target; keyboard and controller still use the same action.
 	local button = Instance.new("TextButton")
 	button.Name = "DigButton"
-	button.AnchorPoint = Vector2.new(0.5, 1)
-	button.Position = UDim2.new(0.5, 0, 1, 0)
-	button.Size = UDim2.fromOffset(210, 56) -- >= 44px height for mobile ergonomics
-	button.BackgroundColor3 = Color3.fromRGB(235, 155, 45)
-	button.Font = Enum.Font.GothamBlack
-	button.TextSize = 20
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	button.TextStrokeTransparency = 0.4
-	button.Text = "GALI [Space / Tap]"
-	button.AutoButtonColor = true
+	button.Position = UDim2.fromOffset(0, 28)
+	button.Size = UDim2.new(1, 0, 0, 74)
+	button.BackgroundTransparency = 1
+	button.Text = ""
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 14
+	button.TextColor3 = Color3.new(1, 1, 1)
+	button.AutoButtonColor = false
+	button.ZIndex = 8
 	button.Parent = container
 	digButton = button
-
-	local btnCorner = Instance.new("UICorner")
-	btnCorner.CornerRadius = UDim.new(0, 12)
-	btnCorner.Parent = button
-
-	local btnStroke = Instance.new("UIStroke")
-	btnStroke.Color = Color3.fromRGB(255, 230, 160)
-	btnStroke.Thickness = 2
-	btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	btnStroke.Parent = button
-
+	local hint = Instance.new("TextLabel")
+	hint.Name = "InputHint"
+	hint.AnchorPoint = Vector2.new(1, 0)
+	hint.Position = UDim2.new(1, 0, 0, 136)
+	hint.Size = UDim2.new(0.5, 0, 0, 18)
+	hint.BackgroundTransparency = 1
+	hint.Font = Enum.Font.GothamBold
+	hint.TextSize = 11
+	hint.TextColor3 = Color3.fromRGB(235, 235, 230)
+	hint.TextStrokeTransparency = 0
+	hint.TextXAlignment = Enum.TextXAlignment.Right
+	hint.Text = "GALI · SPACE / TAP"
+	hint.Parent = container
 	button.Activated:Connect(function()
-		if button.Active then
-			DigController.AttemptStrike()
-		end
+		if button.Active then DigController.AttemptStrike() end
 	end)
-
 	updateZoneLayout()
+	updateResolve()
 end
-
 function DigController.Start()
 	if started then
 		return
@@ -568,14 +618,19 @@ function DigController.Start()
 		end
 		if payload.Event == "SessionStarted" then
 			if payload.MoundId == activeMoundId then
+				sessionReady, awaitingStrike = true, false
 				MoundVisuals.SetDiggingMound(activeMoundId)
 				sessionStartTime = tonumber(payload.StartTime) or workspace:GetServerTimeNow()
 				barSpeed = tonumber(payload.Speed) or barSpeed
 				goodWidth = tonumber(payload.GoodWidth) or goodWidth
 				perfectWidth = tonumber(payload.PerfectWidth) or perfectWidth
 				updateZoneLayout()
+				applyMinigame(payload.Minigame)
 			end
 		elseif payload.Event == "StrikeHit" then
+			if payload.MoundId ~= activeMoundId then return end
+			awaitingStrike = false
+			applyMinigame(payload.Minigame)
 			local grade = tostring(payload.Grade or "Miss")
 			local damage = tonumber(payload.Damage) or 0
 			if type(payload.NextStrikeAllowedAt) == "number" then
@@ -589,11 +644,17 @@ function DigController.Start()
 					end
 				end)
 			end
+		elseif payload.Event == "DigFailed" then
+			if payload.MoundId ~= activeMoundId then return end
+			DigController.StopMinigame(false)
+			showHintToast("Gagal! Klik mound untuk mulai dari 0.")
 		elseif payload.Event == "Rejected" then
+			if payload.MoundId ~= activeMoundId then return end
+			awaitingStrike = false
 			if payload.Reason == "BagFull" then
 				unbindMinigameControls()
 				showBagFullLockedState(tostring(payload.MoundId or ""), activeMoundSize)
-			elseif payload.Reason == "OutOfRange" or payload.Reason == "ShovelNotHeld" then
+			elseif payload.Reason ~= "Cooldown" then
 				DigController.StopMinigame(false)
 			end
 		end
@@ -605,6 +666,9 @@ function DigController.Start()
 			DigController.StopMinigame(true)
 			showHintToast("Penggalian dibatalkan karena sekop dilepas.")
 		end
+	end)
+	LocalPlayer:GetAttributeChangedSignal("EquippedShovel"):Connect(function()
+		if activeMoundId then DigController.StopMinigame(true) end
 	end)
 
 	-- Direct click/tap input for minigame strikes with shovel in hand
@@ -681,14 +745,14 @@ function DigController.Start()
 			local pos = Weighted.IndicatorPos(elapsed, barSpeed)
 			indicatorFrame.Position = UDim2.fromScale(pos, 0.5)
 
-			local onCooldown = now < nextAllowedStrikeTime
-			if onCooldown then
-				local rem = math.max(0, nextAllowedStrikeTime - now)
-				digButton.BackgroundColor3 = Color3.fromRGB(110, 110, 120)
-				digButton.Text = string.format("WAIT %.1fs", rem)
-			else
-				digButton.BackgroundColor3 = Color3.fromRGB(235, 155, 45)
-				digButton.Text = "GALI [Space / Tap]"
+			local onCooldown = now < nextAllowedStrikeTime or awaitingStrike or not sessionReady
+			indicatorFrame.BackgroundTransparency = if onCooldown then 0.45 else 0
+			digButton.Text = ""
+			if hudContainer then
+				local hint = hudContainer:FindFirstChild("InputHint")
+				if hint and hint:IsA("TextLabel") then
+					hint.Text = if not sessionReady then "MENYIAPKAN..." elseif onCooldown then "TUNGGU..." else "GALI · SPACE / TAP"
+				end
 			end
 		end
 	end)

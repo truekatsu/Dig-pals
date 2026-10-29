@@ -1,298 +1,310 @@
 --!strict
--- Client controller for Onboarding Tutorial (steps 1-5, directional guidance, and top guide banner) (Step 14)
+-- Five-step onboarding with a client-only animated blue trail to live gameplay targets.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Types = require(Shared:WaitForChild("Util"):WaitForChild("Types"))
-local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
-
+local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Util"):WaitForChild("Remotes"))
+local MoundVisuals = require(script.Parent:WaitForChild("MoundVisuals"))
 local LocalPlayer = Players.LocalPlayer
-
 local TutorialController = {}
 
-local screenGui: ScreenGui? = nil
-local bannerFrame: Frame? = nil
-local stepBadge: TextLabel? = nil
-local instructionLabel: TextLabel? = nil
-local finishButton: TextButton? = nil
+local BLUE = Color3.fromRGB(72, 173, 255)
+local INK = Color3.fromRGB(16, 29, 47)
+local ARROW_COUNT = 32
+local ARROW_SPACING = 5.5
 
-local pointerModel: Part? = nil
-local pointerAttachment: Attachment? = nil
-local pointerBillboard: BillboardGui? = nil
+type TrailArrow = { Part: Part, Gui: BillboardGui, Label: TextLabel }
+local arrows: { TrailArrow } = {}
+local guideFolder: Folder? = nil
+local targetHighlight: Highlight? = nil
+local marker: Part? = nil
+local markerGui: BillboardGui? = nil
+local markerLabel: TextLabel? = nil
+local targetPosition: Vector3? = nil
+local targetMoundId: string? = nil
 
-local currentStep: number = 1
-local isDone: boolean = false
-local started: boolean = false
+local banner: Frame? = nil
+local title: TextLabel? = nil
+local instruction: TextLabel? = nil
+local action: TextButton? = nil
+local currentStep = 1
+local isDone = false
+local started = false
+local hasEquippedPet = false
+local refreshElapsed = 0
 
-local stepInstructions = {
-	[1] = {
-		Badge = "LANGKAH 1 / 5",
-		Text = "Gali gundukan kecil pertama kamu menggunakan Rusty Shovel!",
-		TargetName = "SmallMound",
-	},
-	[2] = {
-		Badge = "LANGKAH 2 / 5",
-		Text = "Bagus! Bawa hasil galianmu dan jual ke Merchant di Hub atau Base!",
-		TargetName = "ItemMerchant",
-	},
-	[3] = {
-		Badge = "LANGKAH 3 / 5",
-		Text = "Pergi ke Base kamu (tombol KE BASE di atas) & taruh Telur Starter (tekan Telur di kiri)!",
-		TargetName = "BaseTopbarButton",
-	},
-	[4] = {
-		Badge = "LANGKAH 4 / 5",
-		Text = "Buka Pet Bag (tombol PETS), equip pet barumu, lalu gali gundukan bersama!",
-		TargetName = "EquipPetAndDig",
-	},
-	[5] = {
-		Badge = "LANGKAH 5 / 5",
-		Text = "Hebat! Kunjungi Shovel Shop untuk Stone Shovel & cek Quest Harian (tombol QUEST)!",
-		TargetName = "ShovelShopAndQuest",
-	},
+local steps = {
+	{ Title = "Gali Small Mound", Text = "Pegang sekop, lalu klik gundukan." },
+	{ Title = "Jual hasil galian", Text = "Jual item ke Item Merchant." },
+	{ Title = "Tetaskan Starter Egg", Text = "Ke Base, buka telur, lalu tetaskan." },
+	{ Title = "Gali bersama pet", Text = "Equip pet di PETS, lalu gali." },
+	{ Title = "Kunjungi Shovel Shop", Text = "Lihat sekop baru dan cek QUEST." },
 }
 
-local function findCurrentTargetPosition(): Vector3?
-	local plain = workspace:FindFirstChild("Plain")
-	if not plain then
-		return nil
+local function round(parent: Instance, radius: number)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius)
+	corner.Parent = parent
+end
+
+local function textLabel(parent: Instance, name: string, size: number, color: Color3): TextLabel
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = size
+	label.TextColor3 = color
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = parent
+	return label
+end
+
+local function cosmeticPart(name: string, parent: Instance): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Size = Vector3.new(0.1, 0.1, 0.1)
+	part.Anchored = true
+	part.Transparency = 1
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.CastShadow = false
+	part.Parent = parent
+	return part
+end
+
+local function clearGuidance()
+	if guideFolder then guideFolder:Destroy() end
+	guideFolder, targetHighlight, marker, markerGui, markerLabel = nil, nil, nil, nil, nil
+	table.clear(arrows)
+	targetPosition, targetMoundId = nil, nil
+end
+
+local function ensureGuidance()
+	if guideFolder and guideFolder.Parent then return end
+	local folder = Instance.new("Folder")
+	folder.Name = "TutorialGuidance"
+	guideFolder = folder
+	for i = 1, ARROW_COUNT do
+		local part = cosmeticPart("TrailArrow" .. i, folder)
+		local gui = Instance.new("BillboardGui")
+		gui.Name = "ArrowGui"
+		gui.Size = UDim2.new(1.8, 4, 1.8, 4)
+		gui.AlwaysOnTop = false
+		gui.LightInfluence = 0
+		gui.MaxDistance = 180
+		gui.Enabled = false
+		gui.Parent = part
+		local label = textLabel(gui, "Arrow", 24, BLUE)
+		label.Size = UDim2.fromScale(1, 1)
+		label.Text = "▶"
+		label.TextScaled = true
+		label.TextXAlignment = Enum.TextXAlignment.Center
+		label.TextStrokeColor3 = INK
+		label.TextStrokeTransparency = 0.05
+		table.insert(arrows, { Part = part, Gui = gui, Label = label })
 	end
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "TutorialTargetHighlight"
+	highlight.FillColor = BLUE
+	highlight.FillTransparency = 0.9
+	highlight.OutlineColor = BLUE
+	highlight.OutlineTransparency = 0.12
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.Enabled = false
+	highlight.Parent = folder
+	targetHighlight = highlight
+	marker = cosmeticPart("TargetMarker", folder)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "TargetGui"
+	gui.Size = UDim2.fromOffset(180, 46)
+	gui.StudsOffset = Vector3.new(0, 2.2, 0)
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = 180
+	gui.Enabled = false
+	gui.Parent = marker
+	markerGui = gui
+	local label = textLabel(gui, "TargetLabel", 13, BLUE)
+	label.Size = UDim2.fromScale(1, 1)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextStrokeColor3 = INK
+	label.TextStrokeTransparency = 0
+	markerLabel = label
+	folder.Parent = workspace
+end
 
-	local char = LocalPlayer.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local myPos = if root then root.Position else Vector3.zero
+local function refreshUI()
+	if not banner then return end
+	banner.Visible = not isDone
+	if isDone then clearGuidance(); return end
+	local info = steps[currentStep]
+	if title then title.Text = info.Title end
+	if instruction then instruction.Text = info.Text end
+	if action then
+		action.Visible = currentStep >= 3
+		action.Text = if currentStep == 3 then (if LocalPlayer:GetAttribute("CurrentZone") == "Base" then "BUKA TELUR" else "KE BASE")
+			elseif currentStep == 4 then "BUKA PETS" else "SELESAI"
+	end
+end
 
+local function refreshTarget(root: BasePart)
+	local position: Vector3? = nil
+	local adornee: Instance? = nil
+	local label = ""
+	local hint = steps[currentStep].Text
 	if currentStep == 1 or currentStep == 4 then
-		-- Nearest small mound
-		local digField = plain:FindFirstChild("DigField")
-		local nearestPos: Vector3? = nil
-		local nearestDist = math.huge
-		if digField then
-			for _, moundPart in ipairs(digField:GetChildren()) do
-				if moundPart:IsA("BasePart") then
-					local dist = (moundPart.Position - myPos).Magnitude
-					if dist < nearestDist then
-						nearestDist = dist
-						nearestPos = moundPart.Position + Vector3.new(0, 4.5, 0)
-					end
-				end
-			end
-		end
-		return nearestPos or (myPos + Vector3.new(0, 5, 15))
-	elseif currentStep == 2 then
-		-- Hub Item Merchant
-		local merchantFolder = plain:FindFirstChild("Merchant")
-		local hubCounter = merchantFolder and merchantFolder:FindFirstChild("ItemMerchant_Counter") :: BasePart?
-		if hubCounter then
-			return hubCounter.Position + Vector3.new(0, 5, 0)
-		end
-		return Vector3.new(-20, 7, -86.5)
+		local id, model, moundPosition = MoundVisuals.GetTutorialMound(root.Position, targetMoundId)
+		targetMoundId = id
+		position, adornee, label = moundPosition, model, "SMALL MOUND"
+		if not position then hint = "Menunggu Small Mound..."
+		elseif currentStep == 4 and not hasEquippedPet then hint = "Buka PETS dan equip pet dahulu." end
+	elseif currentStep == 2 or currentStep == 5 then
+		local plain = workspace:FindFirstChild("Plain")
+		local merchants = plain and plain:FindFirstChild("Merchant")
+		local counter = merchants and merchants:FindFirstChild(if currentStep == 2 then "ItemMerchant_Counter" else "ShovelShop_Counter")
+		if counter and counter:IsA("BasePart") then position, adornee = counter.Position, counter end
+		label = if currentStep == 2 then "ITEM MERCHANT" else "SHOVEL SHOP"
 	elseif currentStep == 3 then
-		-- Assigned Base Plot
-		local plotName = LocalPlayer:GetAttribute("AssignedPlot") or "Plot1"
-		local basePlots = workspace:FindFirstChild("BasePlots")
-		local plotFolder = basePlots and basePlots:FindFirstChild(plotName)
-		local ground = plotFolder and plotFolder:FindFirstChild(plotName .. "_Ground") :: BasePart?
-		if ground then
-			return ground.Position + Vector3.new(0, 5, 0)
+		local plotName = LocalPlayer:GetAttribute("AssignedPlot")
+		local plots = workspace:FindFirstChild("BasePlots")
+		local plot = if plots and type(plotName) == "string" then plots:FindFirstChild(plotName) else nil
+		local ground = plot and plot:FindFirstChild(tostring(plotName) .. "_Ground")
+		if ground and ground:IsA("BasePart") then
+			local sign = plot and plot:FindFirstChild(tostring(plotName) .. "_SignBoard")
+			position = if sign and sign:IsA("BasePart") then sign.Position + Vector3.new(0, 0, -5) else ground.Position
 		end
-		return Vector3.new(-108, 5, 138)
-	elseif currentStep == 5 then
-		-- Shovel Shop / Hub Plaza area
-		return Vector3.new(0, 6, 0)
+		label = "BASE KAMU"
+		hint = if LocalPlayer:GetAttribute("CurrentZone") == "Base" then "Buka telur, lalu tetaskan Starter Egg." else "Tekan KE BASE untuk teleport."
 	end
-
-	return nil
-end
-
-local function updatePointerVisual()
-	if isDone then
-		if pointerModel then
-			pointerModel.Transparency = 1
-			if pointerBillboard then
-				pointerBillboard.Enabled = false
-			end
-		end
-		return
+	targetPosition = position
+	if instruction then instruction.Text = hint end
+	if targetHighlight then
+		targetHighlight.Adornee = adornee
+		targetHighlight.Enabled = adornee ~= nil
 	end
-
-	local targetPos = findCurrentTargetPosition()
-	if not targetPos then
-		if pointerBillboard then
-			pointerBillboard.Enabled = false
-		end
-		return
+	if marker and markerGui and markerLabel then
+		markerGui.Enabled = position ~= nil
+		if position then marker.Position = position end
+		markerLabel.Text = label .. "\n▼"
 	end
-
-	if not pointerModel or pointerModel.Parent == nil then
-		local part = Instance.new("Part")
-		part.Name = "TutorialPointer"
-		part.Size = Vector3.new(1.5, 1.5, 1.5)
-		part.Anchored = true
-		part.CanCollide = false
-		part.CastShadow = false
-		part.Transparency = 1
-		part.Parent = workspace
-		pointerModel = part
-
-		local bb = Instance.new("BillboardGui")
-		bb.Name = "PointerGui"
-		bb.Size = UDim2.fromOffset(80, 80)
-		bb.StudsOffset = Vector3.new(0, 1.5, 0)
-		bb.AlwaysOnTop = true
-		bb.MaxDistance = 250
-		bb.Parent = part
-		pointerBillboard = bb
-
-		local arrow = Instance.new("TextLabel")
-		arrow.Name = "Arrow"
-		arrow.Size = UDim2.fromScale(1, 1)
-		arrow.BackgroundTransparency = 1
-		arrow.Font = Enum.Font.GothamBlack
-		arrow.TextSize = 34
-		arrow.TextColor3 = Color3.fromRGB(255, 220, 60)
-		arrow.TextStrokeColor3 = Color3.fromRGB(30, 20, 0)
-		arrow.TextStrokeTransparency = 0.2
-		arrow.Text = "V"
-		arrow.Parent = bb
-	end
-
-	if pointerModel and targetPos then
-		pointerModel.CFrame = CFrame.new(targetPos)
-		if pointerBillboard then
-			pointerBillboard.Enabled = true
-		end
+	if guideFolder then
+		guideFolder:SetAttribute("TargetMoundId", targetMoundId)
+		guideFolder:SetAttribute("TargetKind", label)
 	end
 end
 
-local function updateBannerUI()
-	if not bannerFrame then
+local function renderTrail()
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local camera = workspace.CurrentCamera
+	if not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0 or not camera or not targetPosition then
+		for _, arrow in arrows do arrow.Gui.Enabled = false end
+		if markerGui then markerGui.Enabled = false end
 		return
 	end
-
-	if isDone then
-		bannerFrame.Visible = false
-		if pointerBillboard then
-			pointerBillboard.Enabled = false
+	local origin = root.Position - Vector3.new(0, 0.65, 0)
+	local destination = targetPosition + Vector3.new(0, 0.65, 0)
+	local delta = destination - origin
+	local length = delta.Magnitude
+	if length < 0.01 then return end
+	local direction = delta.Unit
+	local phase = (os.clock() * 2.3) % ARROW_SPACING
+	for i, arrow in arrows do
+		local distance = 2.5 + (i - 1) * ARROW_SPACING + phase
+		local visible = distance < length - 1.5
+		if visible then
+			local pos = origin + direction * distance
+			local screen = camera:WorldToViewportPoint(pos)
+			local nextScreen = camera:WorldToViewportPoint(pos + direction)
+			visible = screen.Z > 0 and nextScreen.Z > 0
+			arrow.Part.Position = pos
+			arrow.Label.Rotation = math.deg(math.atan2(nextScreen.Y - screen.Y, nextScreen.X - screen.X))
 		end
-		return
-	end
-
-	bannerFrame.Visible = true
-	local info = stepInstructions[currentStep] or stepInstructions[1]
-
-	if stepBadge then
-		stepBadge.Text = info.Badge
-	end
-	if instructionLabel then
-		instructionLabel.Text = info.Text
-	end
-	if finishButton then
-		finishButton.Visible = (currentStep == 5)
+		arrow.Gui.Enabled = visible
 	end
 end
 
 local function buildUI()
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	local existing = playerGui:FindFirstChild("TutorialGui")
-	if existing and existing:IsA("ScreenGui") then
-		existing:Destroy()
-	end
-
+	if existing then existing:Destroy() end
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "TutorialGui"
 	gui.ResetOnSpawn = false
 	gui.DisplayOrder = 14
-	gui.IgnoreGuiInset = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = playerGui
-	screenGui = gui
-
-	-- Top Guide Banner
-	local banner = Instance.new("Frame")
-	banner.Name = "TutorialBanner"
-	banner.AnchorPoint = Vector2.new(0.5, 0)
-	banner.Position = UDim2.new(0.5, 0, 0, 54)
-	banner.Size = UDim2.fromOffset(560, 64)
-	banner.BackgroundColor3 = Color3.fromRGB(22, 26, 36)
-	banner.BackgroundTransparency = 0.08
-	banner.BorderSizePixel = 0
-	banner.Visible = not isDone
-	banner.Parent = gui
-	bannerFrame = banner
-
-	local bCorner = Instance.new("UICorner")
-	bCorner.CornerRadius = UDim.new(0, 12)
-	bCorner.Parent = banner
-
-	local bStroke = Instance.new("UIStroke")
-	bStroke.Color = Color3.fromRGB(255, 215, 65)
-	bStroke.Thickness = 2
-	bStroke.Parent = banner
-
-	-- Step Badge
-	local badge = Instance.new("TextLabel")
-	badge.Name = "StepBadge"
-	badge.Position = UDim2.fromOffset(14, 10)
-	badge.Size = UDim2.fromOffset(116, 22)
-	badge.BackgroundColor3 = Color3.fromRGB(248, 195, 48)
-	badge.BorderSizePixel = 0
-	badge.Font = Enum.Font.GothamBlack
-	badge.TextSize = 11
-	badge.TextColor3 = Color3.fromRGB(36, 24, 6)
-	badge.Text = "LANGKAH 1 / 5"
-	badge.Parent = banner
-	stepBadge = badge
-
-	local badgeCorner = Instance.new("UICorner")
-	badgeCorner.CornerRadius = UDim.new(0, 6)
-	badgeCorner.Parent = badge
-
-	-- Instruction Text
-	local instLbl = Instance.new("TextLabel")
-	instLbl.Name = "Instruction"
-	instLbl.Position = UDim2.fromOffset(14, 34)
-	instLbl.Size = UDim2.new(1, -140, 0, 24)
-	instLbl.BackgroundTransparency = 1
-	instLbl.Font = Enum.Font.GothamBold
-	instLbl.TextSize = 13
-	instLbl.TextColor3 = Color3.fromRGB(246, 248, 255)
-	instLbl.TextXAlignment = Enum.TextXAlignment.Left
-	instLbl.TextTruncate = Enum.TextTruncate.AtEnd
-	instLbl.Text = stepInstructions[1].Text
-	instLbl.Parent = banner
-	instructionLabel = instLbl
-
-	-- Finish Button (Step 5)
-	local finishBtn = Instance.new("TextButton")
-	finishBtn.Name = "FinishButton"
-	finishBtn.AnchorPoint = Vector2.new(1, 0.5)
-	finishBtn.Position = UDim2.new(1, -12, 0.5, 0)
-	finishBtn.Size = UDim2.fromOffset(108, 40)
-	finishBtn.BackgroundColor3 = Color3.fromRGB(72, 198, 128)
-	finishBtn.BorderSizePixel = 0
-	finishBtn.Font = Enum.Font.GothamBlack
-	finishBtn.TextSize = 13
-	finishBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	finishBtn.Text = "SELESAI"
-	finishBtn.Visible = false
-	finishBtn.Parent = banner
-	finishButton = finishBtn
-
-	local fCorner = Instance.new("UICorner")
-	fCorner.CornerRadius = UDim.new(0, 8)
-	fCorner.Parent = finishBtn
-
-	finishBtn.Activated:Connect(function()
-		Remotes.GetEvent("AdvanceTutorial"):FireServer(5)
-		isDone = true
-		updateBannerUI()
+	local card = Instance.new("Frame")
+	card.Name = "TutorialBanner"
+	card.AnchorPoint = Vector2.new(0.5, 0)
+	card.Position = UDim2.new(0.5, 0, 0, 50)
+	card.Size = UDim2.new(0.9, 0, 0, 92)
+	card.BackgroundTransparency = 1
+	card.BorderSizePixel = 0
+	card.Parent = gui
+	banner = card
+	local limit = Instance.new("UISizeConstraint")
+	limit.MaxSize = Vector2.new(520, 92)
+	limit.Parent = card
+	title = textLabel(card, "Title", 22, Color3.fromRGB(246, 250, 255))
+	title.Position = UDim2.fromOffset(0, 0)
+	title.Size = UDim2.new(1, 0, 0, 28)
+	title.TextXAlignment = Enum.TextXAlignment.Center
+	title.TextStrokeColor3 = INK
+	title.TextStrokeTransparency = 0
+	title.TextScaled = true
+	local titleLimit = Instance.new("UITextSizeConstraint")
+	titleLimit.MaxTextSize = 22
+	titleLimit.Parent = title
+	instruction = textLabel(card, "Instruction", 15, Color3.fromRGB(230, 241, 255))
+	instruction.Position = UDim2.fromOffset(0, 30)
+	instruction.Size = UDim2.new(1, 0, 0, 22)
+	instruction.TextXAlignment = Enum.TextXAlignment.Center
+	instruction.TextStrokeColor3 = INK
+	instruction.TextStrokeTransparency = 0
+	instruction.TextScaled = true
+	local instructionLimit = Instance.new("UITextSizeConstraint")
+	instructionLimit.MaxTextSize = 15
+	instructionLimit.Parent = instruction
+	action = Instance.new("TextButton")
+	action.Name = "ActionButton"
+	action.AnchorPoint = Vector2.new(0.5, 0)
+	action.Position = UDim2.new(0.5, 0, 0, 60)
+	action.Size = UDim2.fromOffset(112, 29)
+	action.BackgroundColor3 = BLUE
+	action.BorderSizePixel = 0
+	action.Font = Enum.Font.GothamBold
+	action.TextColor3 = INK
+	action.TextSize = 11
+	action.Parent = card
+	round(action, 7)
+	action.Activated:Connect(function()
+		if currentStep == 3 then
+			if LocalPlayer:GetAttribute("CurrentZone") == "Base" then
+				require(script.Parent:WaitForChild("BaseController")).OpenIncubatorModal(1)
+			else
+				require(script.Parent:WaitForChild("TeleportController")).TeleportToBase()
+			end
+		elseif currentStep == 4 then
+			require(script.Parent:WaitForChild("PetBagController")).Open()
+		elseif currentStep == 5 then
+			-- Completion is confirmed through the authoritative server state.
+			Remotes.GetEvent("AdvanceTutorial"):FireServer(5)
+		end
 	end)
+end
 
-	updateBannerUI()
+local function applyTutorial(step: any, done: any)
+	if type(step) == "number" and step == step then
+		local nextStep = math.clamp(math.floor(step), 1, 5)
+		if nextStep ~= currentStep then targetMoundId = nil; targetPosition = nil end
+		currentStep = nextStep
+	end
+	if type(done) == "boolean" then isDone = done end
+	refreshElapsed = 1
+	refreshUI()
 end
 
 function TutorialController.GetStep(): (number, boolean)
@@ -300,62 +312,39 @@ function TutorialController.GetStep(): (number, boolean)
 end
 
 function TutorialController.Start()
-	if started then
-		return
-	end
+	if started then return end
 	started = true
-
-	local attrStep = LocalPlayer:GetAttribute("TutorialStep")
-	local attrDone = LocalPlayer:GetAttribute("TutorialDone")
-	if type(attrStep) == "number" then
-		currentStep = attrStep
-	end
-	if type(attrDone) == "boolean" then
-		isDone = attrDone
-	end
-
+	local legacy = workspace:FindFirstChild("TutorialPointer")
+	if legacy then legacy:Destroy() end
+	local stale = workspace:FindFirstChild("TutorialGuidance")
+	if stale then stale:Destroy() end
 	buildUI()
-
-	LocalPlayer:GetAttributeChangedSignal("TutorialStep"):Connect(function()
-		local nextStep = LocalPlayer:GetAttribute("TutorialStep")
-		if type(nextStep) == "number" then
-			currentStep = nextStep
-			updateBannerUI()
-			updatePointerVisual()
-		end
-	end)
-
-	LocalPlayer:GetAttributeChangedSignal("TutorialDone"):Connect(function()
-		local doneVal = LocalPlayer:GetAttribute("TutorialDone")
-		if type(doneVal) == "boolean" then
-			isDone = doneVal
-			updateBannerUI()
-			updatePointerVisual()
-		end
-	end)
-
+	local function syncAttributes()
+		applyTutorial(LocalPlayer:GetAttribute("TutorialStep"), LocalPlayer:GetAttribute("TutorialDone"))
+	end
+	LocalPlayer:GetAttributeChangedSignal("TutorialStep"):Connect(syncAttributes)
+	LocalPlayer:GetAttributeChangedSignal("TutorialDone"):Connect(syncAttributes)
+	LocalPlayer:GetAttributeChangedSignal("CurrentZone"):Connect(refreshUI)
+	LocalPlayer.CharacterRemoving:Connect(clearGuidance)
 	Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(snapshot: any)
-		if type(snapshot) == "table" and type(snapshot.Tutorial) == "table" then
-			local t = snapshot.Tutorial
-			if type(t.Step) == "number" then
-				currentStep = t.Step
-			end
-			if type(t.Done) == "boolean" then
-				isDone = t.Done
-			end
-			updateBannerUI()
-			updatePointerVisual()
-		end
+		if type(snapshot) ~= "table" then return end
+		if type(snapshot.EquippedPets) == "table" then hasEquippedPet = #snapshot.EquippedPets > 0 end
+		if type(snapshot.Tutorial) == "table" then applyTutorial(snapshot.Tutorial.Step, snapshot.Tutorial.Done) end
 	end)
-
-	-- Pointer update heartbeat (every 0.5s)
-	task.spawn(function()
-		while not isDone do
-			task.wait(0.5)
-			if not isDone then
-				updatePointerVisual()
+	syncAttributes()
+	RunService.RenderStepped:Connect(function(dt)
+		if isDone then return end
+		local character = LocalPlayer.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			ensureGuidance()
+			refreshElapsed += dt
+			if refreshElapsed >= 0.2 then
+				refreshElapsed = 0
+				refreshTarget(root)
 			end
 		end
+		renderTrail()
 	end)
 end
 

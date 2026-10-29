@@ -134,7 +134,7 @@ local Mounds = {
 	StrikeDamageMultipliers = {
 		Perfect = 2.0,
 		Good = 1.0,
-		Miss = 0.25,
+		Miss = 0,
 	},
 	TimingScoreGoodWeight = 0.5,
 	TimingScoreLuckMultiplier = 0.25,

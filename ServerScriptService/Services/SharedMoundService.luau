@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Util"):WaitForChild("Types"))
 local Weighted = require(Shared:WaitForChild("Util"):WaitForChild("Weighted"))
+local DigTiming = require(Shared:WaitForChild("Util"):WaitForChild("DigTiming"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"))
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
@@ -26,6 +27,7 @@ export type SharedStrikeSession = {
 	UserId: number,
 	StartTime: number,
 	LastStrikeTime: number,
+	Attempt: DigTiming.Attempt,
 }
 
 export type SharedMoundInstance = {
@@ -43,6 +45,7 @@ export type SharedMoundInstance = {
 	Contributions: { [number]: number },
 	PlayerStrikes: { [number]: { Perfect: number, Good: number, Miss: number } },
 	Sessions: { [number]: SharedStrikeSession },
+	AttemptMisses: { [number]: number },
 }
 
 export type UserRewardSummary = {
@@ -300,6 +303,7 @@ function SharedMoundService.SpawnSharedMound(
 		Contributions = {},
 		PlayerStrikes = {},
 		Sessions = {},
+		AttemptMisses = {},
 	}
 
 	activeSharedMound = mound
@@ -374,9 +378,6 @@ function SharedMoundService.StartSession(
 
 	local now = serverNowOverride or workspace:GetServerTimeNow()
 	local existing = mound.Sessions[userId]
-	if existing then
-		return true, nil, existing
-	end
 
 	-- Step 6: Block starting a NEW mound when Item Bag is full
 	if player and InventoryService.IsPlayerBagFull(player) then
@@ -402,10 +403,12 @@ function SharedMoundService.StartSession(
 		end
 	end
 
+	local shovel = getEquippedShovelConfig(player)
 	local session: SharedStrikeSession = {
 		UserId = userId,
 		StartTime = now,
-		LastStrikeTime = 0,
+		LastStrikeTime = if existing then existing.LastStrikeTime else 0,
+		Attempt = DigTiming.New(shovel.Id, "Shared", now, mound.AttemptMisses[userId]),
 	}
 	mound.Sessions[userId] = session
 
@@ -418,10 +421,11 @@ function SharedMoundService.StartSession(
 			MoundId = moundId,
 			MoundSize = "Shared",
 			StartTime = session.StartTime,
-			Speed = timing.Speed,
+			Speed = session.Attempt.Speed,
 			GoodWidth = timing.GoodWidth,
 			PerfectWidth = timing.PerfectWidth,
 			Cooldown = shovel.DigSpeed,
+			Minigame = session.Attempt,
 		})
 	end
 
@@ -469,6 +473,7 @@ function SharedMoundService.ExecuteStrike(
 	local serverNow = serverNowOverride or workspace:GetServerTimeNow()
 	local session = mound.Sessions[userId]
 	if not session then
+		if player then return { Success = false, Reason = "SessionRequired" } end
 		local okStart, errReason, createdSession = SharedMoundService.StartSession(userId, player, moundId, serverNow, playerPos)
 		if not okStart or not createdSession then
 			return {
@@ -478,8 +483,10 @@ function SharedMoundService.ExecuteStrike(
 		end
 		session = createdSession
 	end
+	if session.Attempt.Failed then return { Success = false, Reason = "DigFailed" } end
 
 	local shovel = getEquippedShovelConfig(player, profileOverride)
+	if session.Attempt.ShovelId ~= shovel.Id then return { Success = false, Reason = "ShovelChanged" } end
 	if player and player.Parent == Players then
 		if not ShovelInventoryService.IsShovelHeld(player) then
 			return {
@@ -495,7 +502,7 @@ function SharedMoundService.ExecuteStrike(
 		}
 	end
 
-	local timing = MoundsConfig.Shared.Timing
+	local timing = session.Attempt
 	local elapsed = math.max(0, serverNow - session.StartTime)
 	local tolerance = if latencyToleranceOverride ~= nil
 		then latencyToleranceOverride
@@ -506,10 +513,11 @@ function SharedMoundService.ExecuteStrike(
 		timing.Speed,
 		timing.GoodWidth,
 		timing.PerfectWidth,
-		tolerance
+		tolerance,
+		timing.ZoneCenter
 	)
 
-	local multiplier = (MoundsConfig.StrikeDamageMultipliers :: any)[grade] or 0.25
+	local multiplier = (MoundsConfig.StrikeDamageMultipliers :: any)[grade] or 0
 	local damage = shovel.Power * multiplier
 
 	local strikes = mound.PlayerStrikes[userId]
@@ -527,6 +535,19 @@ function SharedMoundService.ExecuteStrike(
 	end
 
 	session.LastStrikeTime = serverNow
+	local failed = DigTiming.RecordStrike(session.Attempt, grade)
+	mound.AttemptMisses[userId] = if failed then 0 else session.Attempt.Misses
+	if failed then
+		-- Shared HP and earned contribution belong to everyone; only this player's attempt ends.
+		if player and player.Parent == Players then
+			ShovelInventoryService.PlayStrikeSwing(player)
+			Remotes.GetEvent("StrikeResult"):FireClient(player, {
+				Event = "DigFailed", MoundId = mound.Id, RemainingHP = mound.HP,
+				MaxHP = mound.MaxHP, Minigame = session.Attempt,
+			})
+		end
+		return { Success = true, Failed = true, Grade = grade, Damage = 0, RemainingHP = mound.HP, MaxHP = mound.MaxHP, Cleared = false }
+	end
 	mound.HP = math.max(0, mound.HP - damage)
 	mound.Contributions[userId] = (mound.Contributions[userId] or 0) + damage
 
@@ -558,6 +579,7 @@ function SharedMoundService.ExecuteStrike(
 			Cleared = cleared,
 			Cooldown = shovel.DigSpeed,
 			NextStrikeAllowedAt = serverNow + shovel.DigSpeed,
+			Minigame = session.Attempt,
 		})
 	end
 

@@ -15,8 +15,8 @@ function Weighted.IndicatorPos(t: number, speed: number): number
 	return if x <= 1 then x else 2 - x
 end
 
-function Weighted.GradeAtPosition(pos: number, goodWidth: number, perfectWidth: number): Types.StrikeGrade
-	local distFromCenter = math.abs(pos - 0.5)
+function Weighted.GradeAtPosition(pos: number, goodWidth: number, perfectWidth: number, zoneCenter: number?): Types.StrikeGrade
+	local distFromCenter = math.abs(pos - (zoneCenter or 0.5))
 	if distFromCenter <= (perfectWidth * 0.5) then
 		return "Perfect"
 	elseif distFromCenter <= (goodWidth * 0.5) then
@@ -31,13 +31,14 @@ function Weighted.EvaluateStrikeWithLatency(
 	speed: number,
 	goodWidth: number,
 	perfectWidth: number,
-	latencyToleranceSeconds: number
+	latencyToleranceSeconds: number,
+	zoneCenter: number?
 ): (Types.StrikeGrade, number)
 	local tMax = math.max(0, elapsedSeconds)
 	local tolerance = math.max(0, latencyToleranceSeconds)
 	if tolerance <= 0 then
 		local pos = Weighted.IndicatorPos(tMax, speed)
-		return Weighted.GradeAtPosition(pos, goodWidth, perfectWidth), pos
+		return Weighted.GradeAtPosition(pos, goodWidth, perfectWidth, zoneCenter), pos
 	end
 
 	local tMin = math.max(0, tMax - tolerance)
@@ -49,14 +50,14 @@ function Weighted.EvaluateStrikeWithLatency(
 		local alpha = i / sampleCount
 		local sampleT = tMin + (tMax - tMin) * alpha
 		local pos = Weighted.IndicatorPos(sampleT, speed)
-		local dist = math.abs(pos - 0.5)
+		local dist = math.abs(pos - (zoneCenter or 0.5))
 		if dist < bestDist then
 			bestDist = dist
 			bestPos = pos
 		end
 	end
 
-	return Weighted.GradeAtPosition(bestPos, goodWidth, perfectWidth), bestPos
+	return Weighted.GradeAtPosition(bestPos, goodWidth, perfectWidth, zoneCenter), bestPos
 end
 
 function Weighted.Sum(weights: { [string]: number }): number
