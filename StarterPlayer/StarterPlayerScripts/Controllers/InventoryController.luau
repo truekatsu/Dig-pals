@@ -14,6 +14,9 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 local InventoryController = {}
+local RustyAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("RustyShovelAsset"))
+local StoneAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("StoneShovelAsset"))
+local IronAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("IronShovelAsset"))
 local MenuIcons = require(script.Parent:WaitForChild("MenuIcons"))
 
 -- ============================================================================
@@ -48,9 +51,9 @@ export type AssetConfigType = {
 local ASSETS: AssetConfigType = {
 	Hotbar = {
 		DiamondShovel = "rbxassetid://91702610144104",
-		RustyShovel = "rbxassetid://97280527431570",
-		StoneShovel = "rbxassetid://133034591088020",
-		IronShovel = "rbxassetid://97280527431570",
+		RustyShovel = RustyAsset.Icon,
+		StoneShovel = StoneAsset.Icon,
+		IronShovel = IronAsset.Icon,
 		GoldenShovel = "rbxassetid://100895397684604",
 		MossyShovel = "rbxassetid://103006088766240",
 		MoonlitShovel = "rbxassetid://133100007987104",
@@ -81,17 +84,17 @@ local SHOVEL_CONFIGS: {
 } = {
 	RustyShovel = {
 		DisplayName = "Rusty Shovel",
-		Icon = "rbxassetid://97280527431570",
+		Icon = RustyAsset.Icon,
 		TextColor = Color3.fromRGB(235, 185, 130),
 	},
 	StoneShovel = {
 		DisplayName = "Stone Shovel",
-		Icon = "rbxassetid://133034591088020",
+		Icon = StoneAsset.Icon,
 		TextColor = Color3.fromRGB(215, 220, 230),
 	},
 	IronShovel = {
 		DisplayName = "Iron Shovel",
-		Icon = "rbxassetid://97280527431570",
+		Icon = IronAsset.Icon,
 		TextColor = Color3.fromRGB(195, 225, 255),
 	},
 	GoldenShovel = {

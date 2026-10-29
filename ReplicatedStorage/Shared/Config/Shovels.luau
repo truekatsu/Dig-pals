@@ -1,6 +1,12 @@
 --!strict
 -- Shovel configuration (5 shop shovels + 2 special shared mound shovels)
 
+local RustyAsset = require(script.Parent.Parent:WaitForChild("RustyShovelAsset"))
+
+local StoneAsset = require(script.Parent.Parent:WaitForChild("StoneShovelAsset"))
+
+local IronAsset = require(script.Parent.Parent:WaitForChild("IronShovelAsset"))
+
 local Types = require(script.Parent.Parent.Util.Types)
 
 local ShopOrder: { string } = {
@@ -44,7 +50,7 @@ local All: { [string]: Types.ShovelConfig } = {
 		Luck = 1.0,
 		IsShopShovel = true,
 		ToolName = "RustyShovel",
-		Icon = "rbxassetid://6034509993",
+		Icon = RustyAsset.Icon,
 	},
 	StoneShovel = {
 		Id = "StoneShovel",
@@ -57,7 +63,7 @@ local All: { [string]: Types.ShovelConfig } = {
 		Luck = 1.2,
 		IsShopShovel = true,
 		ToolName = "StoneShovel",
-		Icon = "rbxassetid://6034509993",
+		Icon = StoneAsset.Icon,
 	},
 	IronShovel = {
 		Id = "IronShovel",
@@ -70,7 +76,7 @@ local All: { [string]: Types.ShovelConfig } = {
 		Luck = 1.5,
 		IsShopShovel = true,
 		ToolName = "IronShovel",
-		Icon = "rbxassetid://6034509993",
+		Icon = IronAsset.Icon,
 	},
 	GoldenShovel = {
 		Id = "GoldenShovel",

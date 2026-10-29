@@ -7,7 +7,51 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = script.Parent
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
 
+local Carry = require(Shared:WaitForChild("Config"):WaitForChild("ShovelCarry"))
 local ShovelModelBuilder = {}
+type ImportedShovelAsset = {
+ Version: string, MeshId: string, ColorMap: string, RoughnessMap: string,
+ MetalnessMap: string, Icon: string, Scale: number, Size: Vector3, GripOffsetY: number, GripOffset: Vector3?,
+}
+local ImportedAssets: {[string]: ImportedShovelAsset} = {
+ RustyShovel = require(Shared:WaitForChild("RustyShovelAsset")),
+ StoneShovel = require(Shared:WaitForChild("StoneShovelAsset")),
+ IronShovel = require(Shared:WaitForChild("IronShovelAsset")),
+}
+
+-- Clone the imported MeshPart to retain its PBR maps. The FileMesh path also
+-- supports rebuilding from source when Studio templates have not been loaded.
+local function createImportedVisual(shovelId: string, anchored: boolean): BasePart
+ local asset = ImportedAssets[shovelId]
+ local root = ReplicatedStorage:FindFirstChild("ShovelAssets")
+ local template = root and root:FindFirstChild(shovelId .. "Mesh")
+ local part: BasePart
+ if template and template:IsA("MeshPart") then
+  part = template:Clone()
+ else
+  local fallback = Instance.new("Part")
+  local mesh = Instance.new("SpecialMesh")
+  mesh.MeshType = Enum.MeshType.FileMesh
+  mesh.MeshId = asset.MeshId
+  mesh.TextureId = asset.ColorMap
+  mesh.Scale = Vector3.one * asset.Scale
+  mesh.Parent = fallback
+  part = fallback
+ end
+ part.Name = shovelId .. "Visual"
+ part.Size = asset.Size
+ part.CFrame = CFrame.identity
+ part.PivotOffset = CFrame.identity
+ part.Color = Color3.new(1, 1, 1)
+ part.Material = Enum.Material.SmoothPlastic
+ part.Anchored = anchored
+ part.CanCollide = false
+ part.CanQuery = false
+ part.CanTouch = false
+ part.Massless = true
+ part.CastShadow = false
+ return part
+end
 
 type PartSpec = {
 	Name: string,
@@ -432,7 +476,16 @@ function ShovelModelBuilder.BuildPreviewModel(shovelId: string): Model
 	model.Name = shovelId
 	model:SetAttribute("ShovelId", shovelId)
 
-	local specs = buildShovelPartSpecs(shovelId)
+	local asset = ImportedAssets[shovelId]
+ if asset then
+  local visual = createImportedVisual(shovelId, true)
+  visual.Parent = model
+  model.PrimaryPart = visual
+  model:SetAttribute("VisualVersion", asset.Version)
+  return model
+ end
+
+ local specs = buildShovelPartSpecs(shovelId)
 	local handlePart: BasePart? = nil
 	for _, spec in specs do
 		local part = instantiateSpecPart(spec, true)
@@ -532,6 +585,44 @@ function ShovelModelBuilder.BuildBagPreviewModel(): Model
 	return model
 end
 
+-- Normalize every model to the common character proportion, around its hand hold.
+local function applyCarryDefaults(tool: Tool): Tool
+ if tool:GetAttribute("CarryVersion") == Carry.Version then return tool end
+ local handle = tool:FindFirstChild("Handle") :: BasePart
+ local bounds = Instance.new("Model")
+ for _, child in tool:GetChildren() do child.Parent = bounds end
+ local height = bounds:GetExtentsSize().Y
+ local factor = Carry.Height / math.max(height, 0.01)
+ local origin = handle.CFrame
+ -- Remove/recreate welds after scaling to avoid stale relative offsets.
+ for _, child in bounds:GetDescendants() do
+  if child:IsA("WeldConstraint") then child:Destroy() end
+ end
+ for _, part in bounds:GetDescendants() do
+  if part:IsA("BasePart") then
+   local relative = origin:ToObjectSpace(part.CFrame)
+   part.Size *= factor
+   part.CFrame = CFrame.new(relative.Position * factor) * relative.Rotation
+   for _, mesh in part:GetChildren() do
+    if mesh:IsA("SpecialMesh") and mesh.MeshType == Enum.MeshType.FileMesh then mesh.Scale *= factor end
+   end
+  end
+ end
+ for _, child in bounds:GetChildren() do child.Parent = tool end
+ bounds:Destroy()
+ for _, part in tool:GetDescendants() do
+  if part:IsA("BasePart") and part ~= handle then
+   local weld = Instance.new("WeldConstraint")
+   weld.Part0 = handle
+   weld.Part1 = part
+   weld.Parent = part
+  end
+ end
+ tool.Grip = Carry.IdleGrip
+ tool:SetAttribute("CarryVersion", Carry.Version)
+ return tool
+end
+
 function ShovelModelBuilder.BuildGameplayTool(shovelId: string): Tool
 	local cfg = ShovelsConfig.All[shovelId] or ShovelsConfig.All.RustyShovel
 	local tool = Instance.new("Tool")
@@ -542,10 +633,34 @@ function ShovelModelBuilder.BuildGameplayTool(shovelId: string): Tool
 	tool.ManualActivationOnly = false
 	tool:SetAttribute("DigPalsShovelTool", true)
 	tool:SetAttribute("ShovelId", shovelId)
-	-- Calibrated grip so avatar holds the shaft forward with blade ahead
-	tool.Grip = CFrame.new(0, 0.35, 0) * CFrame.Angles(math.rad(-75), 0, 0)
+	-- Shared diagonal carry and swing origin for every shovel
+	tool.Grip = Carry.IdleGrip
 
-	local specs = buildShovelPartSpecs(shovelId)
+ tool.TextureId = cfg.Icon
+ local asset = ImportedAssets[shovelId]
+ if asset then
+  tool.TextureId = asset.Icon
+  local handle = Instance.new("Part")
+  handle.Name = "Handle"
+  handle.Size = Vector3.new(0.18, 0.5, 0.18)
+  handle.Transparency = 1
+  handle.CanCollide = false
+  handle.CanQuery = false
+  handle.CanTouch = false
+  handle.Massless = true
+  handle.Parent = tool
+  local visual = createImportedVisual(shovelId, false)
+  visual.CFrame = CFrame.new(asset.GripOffset or Vector3.new(0, asset.GripOffsetY, 0))
+  visual.Parent = tool
+  local weld = Instance.new("WeldConstraint")
+  weld.Part0 = handle
+  weld.Part1 = visual
+  weld.Parent = visual
+  tool:SetAttribute("VisualVersion", asset.Version)
+  return applyCarryDefaults(tool)
+ end
+
+ local specs = buildShovelPartSpecs(shovelId)
 	local handlePart: BasePart? = nil
 	local otherParts: { BasePart } = {}
 
@@ -568,7 +683,7 @@ function ShovelModelBuilder.BuildGameplayTool(shovelId: string): Tool
 		end
 	end
 
-	return tool
+	return applyCarryDefaults(tool)
 end
 
 local function ensureChildFolder(parent: Instance, name: string): Folder
@@ -588,12 +703,23 @@ function ShovelModelBuilder.EnsureAssets(): Folder
 	local uiPreviewsFolder = ensureChildFolder(root, "UIPreviews")
 	local toolsFolder = ensureChildFolder(root, "ShovelTools")
 
+ for _, folder in { previewsFolder, toolsFolder } do
+  for id, asset in ImportedAssets do
+   local old = folder:FindFirstChild(id)
+   if old and old:GetAttribute("VisualVersion") ~= asset.Version then
+    old:Destroy()
+   end
+  end
+ end
+
 	for _, shovelId in ShovelsConfig.AllOrder do
 		if not previewsFolder:FindFirstChild(shovelId) then
 			local preview = ShovelModelBuilder.BuildPreviewModel(shovelId)
 			preview.Parent = previewsFolder
 		end
-		if not toolsFolder:FindFirstChild(shovelId) then
+		local oldTool = toolsFolder:FindFirstChild(shovelId)
+  if oldTool and oldTool:GetAttribute("CarryVersion") ~= Carry.Version then oldTool:Destroy() end
+  if not toolsFolder:FindFirstChild(shovelId) then
 			local tool = ShovelModelBuilder.BuildGameplayTool(shovelId)
 			tool.Name = shovelId
 			tool.Parent = toolsFolder
@@ -637,8 +763,9 @@ function ShovelModelBuilder.CloneGameplayTool(shovelId: string): Tool
 		local cfg = ShovelsConfig.All[shovelId]
 		if cfg then
 			cloned.Name = cfg.ToolName
+   cloned.TextureId = cfg.Icon
 		end
-		return cloned
+		return applyCarryDefaults(cloned)
 	end
 	return ShovelModelBuilder.BuildGameplayTool(shovelId)
 end

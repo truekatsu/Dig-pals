@@ -12,6 +12,8 @@ local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local EconomyConfig = require(Shared:WaitForChild("Config"):WaitForChild("Economy"))
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
 local ShovelModelBuilder = require(Shared:WaitForChild("ShovelModelBuilder"))
+local ShovelCarry = require(Shared:WaitForChild("Config"):WaitForChild("ShovelCarry"))
+local ShovelCarryService = require(script.Parent:WaitForChild("ShovelCarryService"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local PlayerState = require(script.Parent:WaitForChild("PlayerState"))
@@ -50,8 +52,8 @@ local toolDesiredActiveByUserId: { [number]: boolean } = {}
 local swingBusyByUserId: { [number]: boolean } = {}
 local started = false
 
-local DEFAULT_GRIP = CFrame.new(0, 0.35, 0) * CFrame.Angles(math.rad(-75), 0, 0)
-local SWING_GRIP = CFrame.new(0, 0.25, -0.25) * CFrame.Angles(math.rad(-130), 0, 0)
+local DEFAULT_GRIP = ShovelCarry.IdleGrip
+local SWING_GRIP = ShovelCarry.SwingGrip
 
 function ShovelInventoryService.SanitizeProfileShovels(profile: Types.PlayerProfile): boolean
 	local changed = false
@@ -500,6 +502,7 @@ local function bindPlayerCharacter(player: Player)
 	end
 
 	local function onCharacterAdded(character: Model)
+		ShovelCarryService.BindCharacter(player, character)
 		task.spawn(function()
 			local humanoid = character:WaitForChild("Humanoid", 10)
 			if not humanoid or player.Parent ~= Players then
