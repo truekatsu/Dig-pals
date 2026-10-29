@@ -146,8 +146,8 @@ function TutorialService.UnlockSandyGateForProfile(
 
 	local currentCoins = profile.Coins or 0
 	if currentCoins < SANDY_GATE_COST then
-		return false, "NotEnoughCoins", string.format("Koin tidak cukup! Membutuhkan %s Coin (Koinmu: %s).",
-			"10.000", tostring(currentCoins))
+		return false, "NotEnoughCoins", string.format("Uang tidak cukup! Membutuhkan $%s (Saldomu: $%s).",
+			"10,000", tostring(currentCoins))
 	end
 
 	profile.Coins = math.max(0, currentCoins - SANDY_GATE_COST)
@@ -313,7 +313,7 @@ function TutorialService.EnsureSandyGateInWorkspace()
 		req2.Font = Enum.Font.GothamBold
 		req2.TextSize = 15
 		req2.TextColor3 = Color3.fromRGB(240, 245, 255)
-		req2.Text = "Syarat 2: Membayar 10.000 Coin"
+		req2.Text = "Syarat 2: Membayar $10,000"
 		req2.Parent = frame
 
 		local status = Instance.new("TextLabel")
@@ -334,7 +334,7 @@ function TutorialService.EnsureSandyGateInWorkspace()
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "UnlockSandyGatePrompt"
 		prompt.ObjectText = "Gerbang Sandy"
-		prompt.ActionText = "Buka Gerbang (10,000 Coin & Iron Shovel+)"
+		prompt.ActionText = "Buka Gerbang ($10,000 & Iron Shovel+)"
 		prompt.HoldDuration = 1.0
 		prompt.MaxActivationDistance = 14
 		prompt.RequiresLineOfSight = false

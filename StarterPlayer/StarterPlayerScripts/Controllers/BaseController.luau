@@ -1,4 +1,5 @@
 --!strict
+local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 -- Client UI controller for Base plots, incubator management, egg placement, speed-up, hatching celebration, and base upgrades (Step 8)
 
 local Players = game:GetService("Players")
@@ -151,7 +152,7 @@ local function refreshRightSlotPane()
 		headerTitleLabel.Text = string.format("INKUBATOR #%d", activeSlotIndex)
 	end
 	if headerCoinsPill then
-		headerCoinsPill.Text = string.format("%s Coin", Format.Commas(coinsBalance))
+		headerCoinsPill.Text = Format.Money(coinsBalance)
 	end
 	local eggCap = BaseConfig.BaseEggBagCapacity + baseLevel
 	if headerEggPill then
@@ -203,7 +204,7 @@ local function refreshRightSlotPane()
 				local canAfford = coinsBalance >= cost
 				slotSpeedUpButton.Text = if isBusy
 					then "MEMPROSES..."
-					else string.format("PERCEPAT (%s Coin)", Format.Commas(cost))
+					else string.format("PERCEPAT ($%s)", Format.Commas(cost))
 				slotSpeedUpButton.BackgroundColor3 = if canAfford then COLORS.BtnSpeedUp else COLORS.BtnDisabled
 				slotSpeedUpButton.TextColor3 = if canAfford then Color3.fromRGB(36, 24, 6) else COLORS.TextMuted
 				slotSpeedUpButton.Active = canAfford and not isBusy
@@ -463,7 +464,7 @@ function BaseController.ShowCelebration(
 		local income = math.floor(speciesCfg.BaseIncome * (if varCfg then varCfg.IncomeMultiplier else 1.0))
 
 		celebrationStatsLabel.Text = string.format(
-			"Power %d  |  Speed %d  |  Jeda Gali %d  |  Range %d studs  |  Income +%d C/dtk",
+			"Power %d  |  Speed %d  |  Jeda Gali %d  |  Range %d studs  |  Income +$%d/dtk",
 			power, speed, digSpeed, range, income
 		)
 	end
@@ -582,7 +583,7 @@ function BaseController.RequestSellEgg(eggBagIndex: number)
 
 	if ok and type(response) == "table" and response.Success == true then
 		local earned = tonumber(response.CoinsEarned) or 0
-		setStatusBanner(string.format("Telur terjual (+%s Coin)!", Format.Commas(earned)), false)
+		setStatusBanner(string.format("Telur terjual (+$%s)!", Format.Commas(earned)), false)
 	else
 		local msg = if ok and type(response) == "table" and type(response.Message) == "string"
 			then response.Message
@@ -736,10 +737,11 @@ local function buildIncubatorGui()
 	coinsPill.Font = Enum.Font.GothamBlack
 	coinsPill.TextSize = 12
 	coinsPill.TextColor3 = COLORS.TextGold
-	coinsPill.Text = "0 Coin"
+	coinsPill.Text = "$0"
 	coinsPill.ZIndex = 12
 	coinsPill.Parent = header
 	headerCoinsPill = coinsPill
+	CurrencyStyle.Balance(coinsPill)
 
 	local coinsPillCorner = Instance.new("UICorner")
 	coinsPillCorner.CornerRadius = UDim.new(1, 0)
@@ -925,7 +927,7 @@ local function buildIncubatorGui()
 	speedUpBtn.Font = Enum.Font.GothamBlack
 	speedUpBtn.TextSize = 14
 	speedUpBtn.TextColor3 = Color3.fromRGB(36, 24, 6)
-	speedUpBtn.Text = "PERCEPAT (25 Coin)"
+	speedUpBtn.Text = "PERCEPAT ($25)"
 	speedUpBtn.Visible = false
 	speedUpBtn.ZIndex = 12
 	speedUpBtn.Parent = rightFrame
@@ -1091,7 +1093,7 @@ local function buildIncubatorGui()
 	cStats.TextSize = 12
 	cStats.TextWrapped = true
 	cStats.TextColor3 = COLORS.TextSecondary
-	cStats.Text = "Power 140 | Speed 8 | Jeda Gali 9 | Range 35 | Income +160 C/dtk"
+	cStats.Text = "Power 140 | Speed 8 | Jeda Gali 9 | Range 35 | Income +$160/dtk"
 	cStats.ZIndex = 27
 	cStats.Parent = celebFrame
 	celebrationStatsLabel = cStats

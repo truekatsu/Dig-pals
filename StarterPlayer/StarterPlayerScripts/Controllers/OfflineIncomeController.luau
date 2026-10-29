@@ -1,4 +1,5 @@
 --!strict
+local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 -- Offline Income Summary Modal Controller (Step 10)
 -- Displays offline earnings popup on join:
 -- "min(detik offline, 43.200) x income x 0,10 dan tampilkan popup ringkasan."
@@ -77,7 +78,7 @@ function OfflineIncomeController.Show(data: {
 
 	local rewardLbl = modalFrame:FindFirstChild("RewardValue", true) :: TextLabel?
 	if rewardLbl then
-		rewardLbl.Text = string.format("+%s COIN", Format.Commas(earned))
+		rewardLbl.Text = string.format("+$%s", Format.Commas(earned))
 	end
 
 	local timeDesc = modalFrame:FindFirstChild("TimeDesc", true) :: TextLabel?
@@ -87,7 +88,7 @@ function OfflineIncomeController.Show(data: {
 
 	local rateDesc = modalFrame:FindFirstChild("RateDesc", true) :: TextLabel?
 	if rateDesc then
-		rateDesc.Text = string.format("Rate Base: +%s Coin/dtk (Rate offline 10%%)", Format.Commas(activeRate))
+		rateDesc.Text = string.format("Rate Base: +$%s/dtk (Rate offline 10%%)", Format.Commas(activeRate))
 	end
 
 	modalBackdrop.Visible = true
@@ -213,8 +214,9 @@ local function buildGui()
 	rewardVal.Font = Enum.Font.GothamBlack
 	rewardVal.TextSize = 28
 	rewardVal.TextColor3 = Color3.fromRGB(255, 220, 70)
-	rewardVal.Text = "+0 COIN"
+	rewardVal.Text = "+$0"
 	rewardVal.Parent = rewardCard
+	CurrencyStyle.Apply(rewardVal)
 
 	-- Stats Breakdown lines
 	local timeLbl = Instance.new("TextLabel")
@@ -238,7 +240,7 @@ local function buildGui()
 	rateLbl.Font = Enum.Font.GothamMedium
 	rateLbl.TextSize = 12
 	rateLbl.TextColor3 = Color3.fromRGB(150, 170, 195)
-	rateLbl.Text = "Rate Base: +0 Coin/dtk (Rate offline 10%)"
+	rateLbl.Text = "Rate Base: +$0/dtk (Rate offline 10%)"
 	rateLbl.Parent = modal
 
 	-- Claim Button
@@ -252,7 +254,7 @@ local function buildGui()
 	claimBtn.Font = Enum.Font.GothamBlack
 	claimBtn.TextSize = 16
 	claimBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	claimBtn.Text = "KLAIM COIN"
+	claimBtn.Text = "KLAIM UANG"
 	claimBtn.Parent = modal
 
 	local cCorner = Instance.new("UICorner")

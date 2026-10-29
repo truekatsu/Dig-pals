@@ -1,4 +1,5 @@
 --!strict
+local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 -- Client controller for Leaderboard modal (Weekly Coins, All-Time Coins, Strongest Pet) (Step 13)
 
 local Players = game:GetService("Players")
@@ -49,10 +50,10 @@ local categoryConfig: {
 	},
 } = {
 	CurrentCoins = {
-		Title = "TOTAL COIN SAAT INI",
-		Subtitle = "Peringkat Berdasarkan Total Coin Saat Ini",
-		TabLabel = "COINS",
-		ScoreSuffix = "Coin",
+		Title = "TOTAL UANG SAAT INI",
+		Subtitle = "Peringkat Berdasarkan Total Uang Saat Ini",
+		TabLabel = "UANG",
+		ScoreSuffix = "",
 		AccentColor = Color3.fromRGB(80, 225, 120),
 	},
 	PlayTime = {
@@ -63,17 +64,17 @@ local categoryConfig: {
 		AccentColor = Color3.fromRGB(0, 195, 255),
 	},
 	WeeklyCoins = {
-		Title = "TOP COIN MINGGUAN",
+		Title = "TOP UANG MINGGUAN",
 		Subtitle = "Reset Otomatis Setiap Senin 00:00 UTC",
 		TabLabel = "MINGGUAN",
-		ScoreSuffix = "Coin",
+		ScoreSuffix = "",
 		AccentColor = Color3.fromRGB(255, 215, 65),
 	},
 	AllTimeCoins = {
-		Title = "TOP COIN SEPANJANG MASA",
-		Subtitle = "Akumulasi Seluruh Coin yang Pernah Didapat",
+		Title = "TOP UANG SEPANJANG MASA",
+		Subtitle = "Akumulasi Seluruh Uang yang Pernah Didapat",
 		TabLabel = "SEMUA MASA",
-		ScoreSuffix = "Coin",
+		ScoreSuffix = "",
 		AccentColor = Color3.fromRGB(80, 225, 120),
 	},
 	StrongestPet = {
@@ -212,7 +213,8 @@ local function renderEntries()
 		scoreLbl.TextSize = 16
 		scoreLbl.TextColor3 = cfg.AccentColor
 		scoreLbl.TextXAlignment = Enum.TextXAlignment.Right
-		scoreLbl.Text = if activeCategory == "PlayTime" then entry.FormattedScore else (Format.Commas(entry.Score) .. " " .. cfg.ScoreSuffix)
+		scoreLbl.Text = if activeCategory == "PlayTime" or activeCategory == "StrongestPet" then entry.FormattedScore else Format.Money(entry.Score, true)
+		if activeCategory ~= "PlayTime" and activeCategory ~= "StrongestPet" then CurrencyStyle.Apply(scoreLbl) end
 		scoreLbl.Parent = card
 	end
 end
@@ -499,15 +501,12 @@ function LeaderboardController.Start()
 		end,
 	})
 
-	-- Bind key [6] and Escape
+	-- Escape closes the modal; numbered hotbar keys are reserved.
 	ContextActionService:BindAction(
 		"ToggleLeaderboardKey",
 		function(_actionName, inputState, inputObject)
 			if inputState == Enum.UserInputState.Begin then
-				if inputObject.KeyCode == Enum.KeyCode.Six or inputObject.KeyCode == Enum.KeyCode.KeypadSix then
-					LeaderboardController.Toggle()
-					return Enum.ContextActionResult.Sink
-				elseif inputObject.KeyCode == Enum.KeyCode.Escape and isOpen then
+				if inputObject.KeyCode == Enum.KeyCode.Escape and isOpen then
 					LeaderboardController.Close()
 					return Enum.ContextActionResult.Sink
 				end
@@ -515,8 +514,6 @@ function LeaderboardController.Start()
 			return Enum.ContextActionResult.Pass
 		end,
 		false,
-		Enum.KeyCode.Six,
-		Enum.KeyCode.KeypadSix,
 		Enum.KeyCode.Escape
 	)
 

@@ -46,32 +46,27 @@ function UI.Mount(controller, gui, shovels)
 	local nav=panel.NavigationBar
 	local content=panel.ContentArea
 	panel.ClipsDescendants=false
-	panel.Size=UDim2.fromOffset(900,560)
+	panel.Size=UDim2.fromOffset(900,478)
 	panel.BackgroundColor3=Cream
 	panel.BackgroundTransparency=0
 	content.BackgroundTransparency=0
 	panel.BorderTrim.Visible=false
-	nav.Position=UDim2.fromOffset(22,100)
-	nav.Size=UDim2.new(1,-44,0,52)
-	content.Position=UDim2.fromOffset(22,164)
-	content.Size=UDim2.new(1,-44,1,-220)
+	nav.Position=UDim2.fromOffset(22,18)
+	nav.Size=UDim2.new(1,-112,0,52)
+	content.Position=UDim2.fromOffset(22,82)
+	content.Size=UDim2.new(1,-44,1,-138)
 	content.BackgroundColor3=Color3.fromRGB(240,225,188)
-	local header=make("Frame",panel,{Name="ExpeditionHeader",Size=UDim2.new(1,0,0,82),BackgroundColor3=Color3.fromRGB(49,93,108),BorderSizePixel=0,ZIndex=34})
-	round(header,16) stroke(header)
-	make("UIGradient",header,{Rotation=90,Color=ColorSequence.new(Color3.fromRGB(116,169,181),Color3.fromRGB(48,95,111))})
-	local title=label(header,"YOUR FIELD BAG",UDim2.fromOffset(24,6),UDim2.new(1,-120,0,40),30,Cream)
-	title.TextXAlignment=Enum.TextXAlignment.Left
-	stroke(title,Ink,2)
-	local subtitle=label(header,"DIG PALS  /  EXPEDITION SUPPLIES",UDim2.fromOffset(26,49),UDim2.new(1,-110,0,22),13,Color3.fromRGB(211,239,221))
-	subtitle.TextXAlignment=Enum.TextXAlignment.Left
 	local close=panel:FindFirstChild("CloseButton")
 	if close then close.Visible=false end
 	-- Existing button names can differ between saved UI versions.
 	for _,v in panel:GetChildren() do if v:IsA("ImageButton") then v.Visible=false end end
-	local x=button(header,"X",UDim2.new(1,-65,0,15),UDim2.fromOffset(48,48),Color3.fromRGB(221,83,70))
+	local x=button(panel,"X",UDim2.new(1,-70,0,20),UDim2.fromOffset(48,48),Color3.fromRGB(221,83,70))
+	x.Name="CloseInventoryButton"
 	x.Activated:Connect(controller.CloseInventory)
-	local footer=label(panel,"Find it. Keep it. Dig deeper.",UDim2.new(0,25,1,-42),UDim2.new(1,-50,0,24),15,Color3.fromRGB(113,102,73))
-	footer.TextXAlignment=Enum.TextXAlignment.Left
+	local status=label(panel,"",UDim2.new(0,25,1,-42),UDim2.new(1,-280,0,24),15,Color3.fromRGB(170,57,48))
+	status.Name="InventoryError"
+	status.TextXAlignment=Enum.TextXAlignment.Left
+	status.Visible=false
 	local count=label(panel,"",UDim2.new(1,-245,1,-42),UDim2.fromOffset(220,24),15)
 	count.TextXAlignment=Enum.TextXAlignment.Right
 	-- Compact, numbered nine-pocket tool belt.
@@ -95,22 +90,20 @@ function UI.Mount(controller, gui, shovels)
 		b.NumberBadge.BadgeNumber.TextSize=13
 		b.NumberBadge.ZIndex=16
 		b.NumberBadge.BadgeNumber.ZIndex=17
+		b.NumberBadge.BadgeNumber.Font=Enum.Font.FredokaOne
+		b.NumberBadge.BadgeNumber.TextColor3=Cream
 		b.SelectionGlow.UIStroke.Transparency=.1
 		b.SlotName.UIStroke.Thickness=1.2
-		local lip=make("Frame",b,{Name="TopHighlight",Position=UDim2.fromOffset(25,4),Size=UDim2.new(1,-34,0,3),BackgroundColor3=Cream,BackgroundTransparency=.65,BorderSizePixel=0,ZIndex=15})
-		round(lip,3)
 	end
 	for i=4,9 do
-		local b=make("Frame",bar,{Name="Slot"..i.."_Empty",Size=UDim2.fromOffset(76,82),LayoutOrder=i,BackgroundColor3=Color3.fromRGB(49,74,81),BackgroundTransparency=.12,BorderSizePixel=0,ZIndex=11})
+		local b=make("ImageButton",bar,{Name="Slot"..i.."_Empty",Size=UDim2.fromOffset(76,82),LayoutOrder=i,Image="",AutoButtonColor=false,BackgroundColor3=Color3.fromRGB(49,74,81),BackgroundTransparency=.12,BorderSizePixel=0,ZIndex=11})
+		b.Activated:Connect(function() controller.SelectHotbarSlot(i) end)
 		round(b,12) stroke(b)
 		local n=label(b,tostring(i),UDim2.fromOffset(6,3),UDim2.fromOffset(16,20),13,Cream) n.ZIndex=15
-		local dash=label(b,"·",UDim2.fromOffset(0,14),UDim2.new(1,0,0,45),32,Color3.fromRGB(107,134,137)) dash.ZIndex=12
 	end
 	local function render()
 		local cat=controller.GetActiveCategory()
 		local shovelMode=cat=="Shovel"
-		title.Text=shovelMode and "SHOVEL LOCKER" or "YOUR FIELD BAG"
-		subtitle.Text=shovelMode and "CHOOSE YOUR TOOL  /  MAKE EVERY DIG COUNT" or "DIG PALS  /  YOUR FINDS & LITTLE COMPANIONS"
 		for _,name in {"Items","Shovel","Eggs","Pet"} do
 			local tab=nav:FindFirstChild(name.."Tab")
 			if tab then
@@ -135,7 +128,8 @@ function UI.Mount(controller, gui, shovels)
 		end
 		table.sort(entries,function(a,b) return tostring(a.id)..tostring(a.guid)<tostring(b.id)..tostring(b.guid) end)
 		count.Text=#entries..(cat=="Shovel" and " TOOLS OWNED" or " FINDS")
-		footer.Text=errorText or (cat=="Pet" and "Tap a companion to equip or unequip." or cat=="Eggs" and "Bring eggs to your base incubators to hatch." or cat=="Shovel" and "Tap a tool to equip it for your next dig." or "Your discoveries, fresh from the dirt.")
+		status.Text=errorText or ""
+		status.Visible=errorText~=nil
 		if #entries==0 then
 			local empty=label(scroll,loaded and "Empty..." or "Loading...",UDim2.fromScale(0,.36),UDim2.new(1,0,0,55),32,Color3.fromRGB(154,137,98))
 			empty.Name="EmptyState"

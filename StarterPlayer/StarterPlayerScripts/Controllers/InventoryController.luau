@@ -18,6 +18,7 @@ local RustyAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild
 local StoneAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("StoneShovelAsset"))
 local IronAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("IronShovelAsset"))
 local MenuIcons = require(script.Parent:WaitForChild("MenuIcons"))
+local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Util"):WaitForChild("Remotes"))
 
 -- ============================================================================
 -- 1. CONFIGURATION & ASSET IDS
@@ -221,6 +222,18 @@ local onCategoryChangedHook: ((category: string) -> ())? = nil
 local resolveUI: () -> ()
 local equipToolForSlot: (slotNumber: number) -> ()
 
+local function isShovelHeld(): boolean
+	local character = LocalPlayer.Character
+	if character then
+		for _, child in character:GetChildren() do
+			if child:IsA("Tool") and (child:GetAttribute("DigPalsShovelTool") == true or child:GetAttribute("ShovelId") == currentEquippedShovelId) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- ============================================================================
 -- 3. TOOL INTEGRATION (DYNAMIC EQUIPPED SHOVEL SYNC)
 -- ============================================================================
@@ -273,10 +286,7 @@ function InventoryController.SyncEquippedShovel(targetShovelId: string?)
 		end
 	end
 
-	-- If Slot 1 is currently selected, ensure character equips this shovel tool
-	if selectedSlot == 1 then
-		equipToolForSlot(1)
-	end
+	-- Updating the icon must never re-equip a tool the player put away.
 end
 
 function equipToolForSlot(slotNumber: number)
@@ -429,7 +439,7 @@ local function updateResponsiveLayout()
 	if hotbarScale then
 		local factorX = math.clamp((vw - 28) / 790, 0.25, 1)
 		local factorY = math.clamp(vh / 600, 0.4, 1)
-		hotbarScale.Scale = math.min(factorX, factorY)
+		hotbarScale.Scale = 0.85 * math.min(factorX, factorY)
 	end
 
 	if inventoryScale then
@@ -445,7 +455,7 @@ end
 function InventoryController.UpdateHotbarAppearance()
 	resolveUI()
 	for slotNum, comp in pairs(slotComponentsByNumber) do
-		local isSelected = (slotNum == selectedSlot)
+		local isSelected = if slotNum == 1 then not isInventoryOpen and isShovelHeld() else isInventoryOpen and slotNum == selectedSlot
 
 		if isSelected then
 			comp.Stroke.Color = COLORS.CardBorderSelected
@@ -553,19 +563,34 @@ function InventoryController.SelectHotbarSlot(slotNumber: number)
 	end
 
 	if slotNumber > 3 then return end
-	selectedSlot = slotNumber
-	InventoryController.UpdateHotbarAppearance()
-
 	if slotNumber == 1 then
-		equipToolForSlot(1)
+		local active = not isShovelHeld()
 		if isInventoryOpen then
 			InventoryController.CloseInventory()
 		end
+		if active then
+			equipToolForSlot(1)
+		else
+			local character = LocalPlayer.Character
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if humanoid then humanoid:UnequipTools() end
+		end
+		selectedSlot = if active then 1 else 0
+		Remotes.GetEvent("SetShovelToolActive"):FireServer(active)
 	elseif slotNumber == 2 then
-		InventoryController.OpenInventory("Shovel")
+		if isInventoryOpen and activeCategory == "Shovel" then
+			InventoryController.CloseInventory()
+		else
+			InventoryController.OpenInventory("Shovel")
+		end
 	elseif slotNumber == 3 then
-		InventoryController.OpenInventory("Items")
+		if isInventoryOpen and activeCategory ~= "Shovel" then
+			InventoryController.CloseInventory()
+		else
+			InventoryController.OpenInventory("Items")
+		end
 	end
+	InventoryController.UpdateHotbarAppearance()
 end
 
 function InventoryController.SetActiveCategory(category: string)
@@ -574,7 +599,9 @@ function InventoryController.SetActiveCategory(category: string)
 	end
 
 	activeCategory = category
+	if isInventoryOpen then selectedSlot = if category == "Shovel" then 2 else 3 end
 	InventoryController.UpdateInventoryContent()
+	InventoryController.UpdateHotbarAppearance()
 end
 
 function InventoryController.OpenInventory(category: string?)
@@ -590,6 +617,7 @@ function InventoryController.OpenInventory(category: string?)
 	end
 
 	isInventoryOpen = true
+	selectedSlot = if activeCategory == "Shovel" then 2 else 3
 	LocalPlayer:SetAttribute("ActiveShopModal", "Inventory")
 
 	if modalBackdrop then
@@ -602,6 +630,7 @@ function InventoryController.OpenInventory(category: string?)
 	end
 
 	InventoryController.UpdateInventoryContent()
+	InventoryController.UpdateHotbarAppearance()
 end
 
 function InventoryController.CloseInventory()
@@ -612,6 +641,7 @@ function InventoryController.CloseInventory()
 	end
 
 	isInventoryOpen = false
+	selectedSlot = if isShovelHeld() then 1 else 0
 	if LocalPlayer:GetAttribute("ActiveShopModal") == "Inventory" then
 		LocalPlayer:SetAttribute("ActiveShopModal", "")
 	end
@@ -836,20 +866,10 @@ local function buildDigPalsUI()
 		badge.Name = "NumberBadge"
 		badge.Position = UDim2.fromOffset(12, 12)
 		badge.Size = UDim2.fromOffset(36, 36)
-		badge.BackgroundColor3 = COLORS.BadgeBg
+		badge.BackgroundTransparency = 1
 		badge.BorderSizePixel = 0
 		badge.ZIndex = 14
 		badge.Parent = cardBtn
-
-		local badgeCorner = Instance.new("UICorner")
-		badgeCorner.CornerRadius = UDim.new(0, 8)
-		badgeCorner.Parent = badge
-
-		local badgeStroke = Instance.new("UIStroke")
-		badgeStroke.Color = COLORS.BadgeBorder
-		badgeStroke.Thickness = 2.0
-		badgeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		badgeStroke.Parent = badge
 
 		local badgeLbl = Instance.new("TextLabel")
 		badgeLbl.Name = "BadgeNumber"
@@ -1334,6 +1354,12 @@ function InventoryController.Start()
 	end
 	LocalPlayer:GetAttributeChangedSignal("EquippedShovel"):Connect(onShovelAttrChanged)
 	onShovelAttrChanged()
+	LocalPlayer:GetAttributeChangedSignal("ShovelToolActive"):Connect(function()
+		if not isInventoryOpen then
+			selectedSlot = if LocalPlayer:GetAttribute("ShovelToolActive") == true then 1 else 0
+		end
+		InventoryController.UpdateHotbarAppearance()
+	end)
 
 	-- StateSync listener to keep hotbar in sync with server state
 	pcall(function()
@@ -1369,10 +1395,9 @@ function InventoryController.Start()
 		pcall(function()
 			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 		end)
-		-- Re-equip active tool if slot 1 was selected
-		if selectedSlot == 1 then
-			equipToolForSlot(1)
-		end
+		-- The server restores the desired tool state across respawns.
+		if not isInventoryOpen then selectedSlot = if isShovelHeld() then 1 else 0 end
+		InventoryController.UpdateHotbarAppearance()
 	end)
 end
 

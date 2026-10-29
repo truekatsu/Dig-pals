@@ -1,4 +1,5 @@
 --!strict
+local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 -- Client controller for Daily Quests (pool of 8, pick 3 daily) and 7-day Login Streak modals (Step 12)
 
 local Players = game:GetService("Players")
@@ -157,7 +158,7 @@ local function renderQuests()
 		local rewardText = ""
 		if def then
 			if def.RewardCoins > 0 then
-				rewardText = string.format("+%d Coins", def.RewardCoins)
+				rewardText = string.format("+$%d", def.RewardCoins)
 			elseif def.RewardEggId then
 				rewardText = string.format("+1 %s", tostring(EggsConfig.All[def.RewardEggId] and EggsConfig.All[def.RewardEggId].DisplayName or def.RewardEggId))
 			end
@@ -301,16 +302,17 @@ local function renderStreak()
 		dHeader.Text = string.format("HARI %d", dayIdx)
 		dHeader.Parent = card
 
-		local rewCoins = string.format("+%d Coins", reward.RewardCoins)
+		local rewCoins = string.format("+$%d", reward.RewardCoins)
 		local rCoinLbl = Instance.new("TextLabel")
 		rCoinLbl.Size = UDim2.new(1, -8, 0, 18)
 		rCoinLbl.Position = UDim2.fromOffset(4, 28)
 		rCoinLbl.BackgroundTransparency = 1
 		rCoinLbl.Font = Enum.Font.GothamBold
 		rCoinLbl.TextSize = 12
-		rCoinLbl.TextColor3 = Color3.fromRGB(255, 215, 75)
+		rCoinLbl.TextColor3 = CurrencyStyle.Green
 		rCoinLbl.Text = rewCoins
 		rCoinLbl.Parent = card
+		CurrencyStyle.Apply(rCoinLbl)
 
 		local eggTxt = if reward.RewardEggId then ("+ " .. tostring(EggsConfig.All[reward.RewardEggId] and EggsConfig.All[reward.RewardEggId].DisplayName or reward.RewardEggId)) else ""
 		local rEggLbl = Instance.new("TextLabel")
@@ -677,10 +679,7 @@ function QuestStreakController.Start()
 		"ToggleQuestModalKey",
 		function(_actionName, inputState, inputObject)
 			if inputState == Enum.UserInputState.Begin then
-				if inputObject.KeyCode == Enum.KeyCode.Five or inputObject.KeyCode == Enum.KeyCode.KeypadFive then
-					QuestStreakController.Toggle("Quests")
-					return Enum.ContextActionResult.Sink
-				elseif inputObject.KeyCode == Enum.KeyCode.Escape and isOpen then
+				if inputObject.KeyCode == Enum.KeyCode.Escape and isOpen then
 					QuestStreakController.Close()
 					return Enum.ContextActionResult.Sink
 				end
@@ -688,8 +687,6 @@ function QuestStreakController.Start()
 			return Enum.ContextActionResult.Pass
 		end,
 		false,
-		Enum.KeyCode.Five,
-		Enum.KeyCode.KeypadFive,
 		Enum.KeyCode.Escape
 	)
 

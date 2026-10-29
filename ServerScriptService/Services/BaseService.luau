@@ -99,7 +99,7 @@ function BaseService.UpgradeBaseInProfile(profile: Types.PlayerProfile): Upgrade
 		return {
 			Success = false,
 			Reason = "InsufficientCoins",
-			Message = string.format("Coin belum cukup! Butuh %d Coin untuk upgrade ke Lv.%d.", cost, curLevel + 1),
+			Message = string.format("Uang belum cukup! Butuh $%d untuk upgrade ke Lv.%d.", cost, curLevel + 1),
 			NewBaseLevel = curLevel,
 			Coins = profile.Coins,
 		}

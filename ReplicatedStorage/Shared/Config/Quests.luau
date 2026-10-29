@@ -39,7 +39,7 @@ local Pool: { QuestDefinition } = {
 	{
 		Id = "SellItems1000Coins",
 		DisplayName = "Merchant Trader",
-		Description = "Sell items worth 1,000 coins",
+		Description = "Sell items worth $1,000",
 		EventType = "CoinsFromSellingItems",
 		Target = 1000,
 		RewardCoins = 0,

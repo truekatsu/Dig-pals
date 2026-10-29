@@ -1,4 +1,5 @@
 --!strict
+local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 -- Client UI controller for Hub Shovel Shop: 5 shop shovels with 3D previews, stats comparison, non-sequential purchase [U], and equip (Step 7)
 
 local Players = game:GetService("Players")
@@ -195,7 +196,7 @@ local function refreshHeaderAndRowBadges()
 		headerOwnedPill.Text = string.format("Koleksi Toko: %d / %d", countOwnedShopShovels(), #ShovelsConfig.ShopOrder)
 	end
 	if headerCoinsPill then
-		headerCoinsPill.Text = string.format("%s Coin", Format.Commas(coinsBalance))
+		headerCoinsPill.Text = Format.Money(coinsBalance)
 	end
 
 	for _, shovelId in ShovelsConfig.ShopOrder do
@@ -221,11 +222,12 @@ local function refreshHeaderAndRowBadges()
 				refs.Badge.TextColor3 = COLORS.TextSecondary
 			else
 				local canAfford = coinsBalance >= cfg.Price
-				refs.Badge.Text = string.format("%s C", Format.Commas(cfg.Price))
+				refs.Badge.Text = Format.Money(cfg.Price)
+				CurrencyStyle.Apply(refs.Badge)
 				refs.Badge.BackgroundColor3 = if canAfford
 					then COLORS.BadgePriceAffordableBg
 					else COLORS.BadgePriceLockedBg
-				refs.Badge.TextColor3 = if canAfford then COLORS.TextGold else COLORS.TextError
+				refs.Badge.TextColor3 = if canAfford then CurrencyStyle.Green else COLORS.TextError
 			end
 		end
 	end
@@ -266,7 +268,7 @@ local function refreshDetailPane()
 			detailPriceOrStateLabel.TextColor3 = COLORS.TextSecondary
 		else
 			local canAfford = coinsBalance >= cfg.Price
-			detailPriceOrStateLabel.Text = string.format("Harga: %s Coin", Format.Commas(cfg.Price))
+			detailPriceOrStateLabel.Text = string.format("Harga: $%s", Format.Commas(cfg.Price))
 			detailPriceOrStateLabel.TextColor3 = if canAfford then COLORS.TextGold else COLORS.TextError
 		end
 	end
@@ -326,13 +328,13 @@ local function refreshDetailPane()
 			actionButton.Active = true
 			actionButton.AutoButtonColor = true
 		elseif coinsBalance >= cfg.Price then
-			actionButton.Text = string.format("BELI & PAKAI (%s Coin)", Format.Commas(cfg.Price))
+			actionButton.Text = string.format("BELI & PAKAI ($%s)", Format.Commas(cfg.Price))
 			actionButton.BackgroundColor3 = COLORS.BtnBuy
 			actionButton.TextColor3 = COLORS.TextPrimary
 			actionButton.Active = true
 			actionButton.AutoButtonColor = true
 		else
-			actionButton.Text = string.format("COIN KURANG (%s Coin)", Format.Commas(cfg.Price))
+			actionButton.Text = string.format("UANG KURANG ($%s)", Format.Commas(cfg.Price))
 			actionButton.BackgroundColor3 = COLORS.BtnDisabled
 			actionButton.TextColor3 = COLORS.TextMuted
 			actionButton.Active = false
@@ -817,10 +819,11 @@ local function buildShovelShopGui()
 	coinsPill.Font = Enum.Font.GothamBlack
 	coinsPill.TextSize = 12
 	coinsPill.TextColor3 = COLORS.TextGold
-	coinsPill.Text = "100 Coin"
+	coinsPill.Text = "$100"
 	coinsPill.ZIndex = 12
 	coinsPill.Parent = header
 	headerCoinsPill = coinsPill
+	CurrencyStyle.Balance(coinsPill)
 
 	local coinsPillCorner = Instance.new("UICorner")
 	coinsPillCorner.CornerRadius = UDim.new(1, 0)
@@ -1001,10 +1004,11 @@ local function buildShovelShopGui()
 	priceState.TextSize = 12
 	priceState.TextXAlignment = Enum.TextXAlignment.Left
 	priceState.TextColor3 = COLORS.TextGold
-	priceState.Text = "Harga: 400 Coin"
+	priceState.Text = "Harga: $400"
 	priceState.ZIndex = 12
 	priceState.Parent = rightPane
 	detailPriceOrStateLabel = priceState
+	CurrencyStyle.Apply(priceState, true)
 
 	local desc = Instance.new("TextLabel")
 	desc.Name = "Description"

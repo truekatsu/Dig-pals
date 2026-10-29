@@ -93,7 +93,7 @@ function ShopService.BuyShovelInProfile(
 		return {
 			Success = false,
 			Reason = "InsufficientCoins",
-			Message = string.format("Coin belum cukup! Butuh %d Coin.", price),
+			Message = string.format("Uang belum cukup! Butuh $%d.", price),
 			Equipped = profile.Shovels.Equipped,
 			Owned = table.clone(profile.Shovels.Owned),
 			PricePaid = 0,

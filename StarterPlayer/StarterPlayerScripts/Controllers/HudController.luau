@@ -1,5 +1,5 @@
 --!strict
--- Persistent Simulator HUD: Coins counter, Bag capacity (e.g. 12/20), EggBag counter, and Drop/Auto-Sell notifications (Step 6)
+-- Persistent coin wallet and drop notifications. Bag data remains available to gameplay.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -33,11 +33,8 @@ local uiScale: UIScale? = nil
 local coinsTextLabel: TextLabel? = nil
 local coinsScaleInst: UIScale? = nil
 local incomeTextLabel: TextLabel? = nil
-local bagTextLabel: TextLabel? = nil
-local bagLevelBadge: TextLabel? = nil
-local bagFillFrame: Frame? = nil
-local bagStrokeInst: UIStroke? = nil
-local eggTextLabel: TextLabel? = nil
+local coinCluster: Frame? = nil
+local dropScale: UIScale? = nil
 local dropBannerContainer: Frame? = nil
 
 local function updateResponsiveScale()
@@ -52,11 +49,16 @@ local function updateResponsiveScale()
 	local scaleW = vp.X / 900
 	local scaleH = vp.Y / 660
 	uiScale.Scale = math.clamp(math.min(1, scaleW, scaleH), 0.55, 1.0)
+	if dropScale then dropScale.Scale = uiScale.Scale end
+	if coinCluster then
+		-- On narrow screens place the wallet above the centered hotbar.
+		coinCluster.Position = UDim2.new(0, 20, 1, if vp.X < 1120 then -114 else -24)
+	end
 end
 
 local function refreshHudVisuals(animateCoinPop: boolean?)
 	if coinsTextLabel then
-		coinsTextLabel.Text = Format.Commas(coinsValue)
+		coinsTextLabel.Text = Format.Money(coinsValue, true)
 	end
 	if incomeTextLabel then
 		if incomeValue > 0 then
@@ -73,48 +75,6 @@ local function refreshHudVisuals(animateCoinPop: boolean?)
 		}):Play()
 	end
 
-	local isFull = bagCountValue >= bagCapacityValue
-	local ratio = if bagCapacityValue > 0 then math.clamp(bagCountValue / bagCapacityValue, 0, 1) else 0
-
-	if bagTextLabel then
-		if isFull then
-			bagTextLabel.Text = string.format("PENUH %d/%d", bagCountValue, bagCapacityValue)
-			bagTextLabel.TextColor3 = Color3.fromRGB(255, 118, 118)
-		else
-			bagTextLabel.Text = string.format("Tas %d/%d", bagCountValue, bagCapacityValue)
-			bagTextLabel.TextColor3 = Color3.fromRGB(244, 247, 252)
-		end
-	end
-
-	if bagLevelBadge then
-		bagLevelBadge.Text = string.format("Lv.%d", bagLevelValue)
-	end
-
-	if bagFillFrame then
-		local fillColor = if isFull
-			then Color3.fromRGB(238, 78, 84)
-			elseif ratio >= 0.8 then Color3.fromRGB(246, 178, 60)
-			else Color3.fromRGB(72, 198, 128)
-		bagFillFrame.BackgroundColor3 = fillColor
-		TweenService:Create(bagFillFrame, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Size = UDim2.fromScale(ratio, 1),
-		}):Play()
-	end
-
-	if bagStrokeInst then
-		bagStrokeInst.Color = if isFull
-			then Color3.fromRGB(242, 92, 96)
-			else Color3.fromRGB(98, 112, 142)
-		bagStrokeInst.Thickness = if isFull then 2.2 else 1.5
-	end
-
-	if eggTextLabel then
-		local eggFull = eggCountValue >= eggCapacityValue
-		eggTextLabel.Text = string.format("Telur %d/%d", eggCountValue, eggCapacityValue)
-		eggTextLabel.TextColor3 = if eggFull
-			then Color3.fromRGB(255, 206, 98)
-			else Color3.fromRGB(205, 214, 232)
-	end
 end
 
 local function syncFromAttributes(animateCoins: boolean?)
@@ -272,13 +232,13 @@ function HudController.ShowDropSummary(summary: any)
 		if drop.AutoSold then
 			subLabel.TextColor3 = Color3.fromRGB(255, 212, 92)
 			subLabel.Text = string.format(
-				"Tas Telur Penuh! Otomatis dijual +%s Coin",
+				"Tas Telur Penuh! Otomatis dijual +$%s",
 				Format.Commas(tonumber(drop.AutoSoldCoins) or 0)
 			)
 		else
 			subLabel.TextColor3 = rarityColor
 			subLabel.Text = string.format(
-				"%s | Nilai Jual: %s Coin",
+				"%s | Nilai Jual: $%s",
 				rarityName,
 				Format.Commas(tonumber(drop.SellPrice) or 0)
 			)
@@ -329,13 +289,16 @@ local function buildHudGui()
 	uiScale = scaleInst
 	updateResponsiveScale()
 
-	-- Top-left status cluster (Coins, Bag Capacity, Egg Bag)
+	-- Bottom-left wallet; capacity indicators are intentionally omitted.
 	local cluster = Instance.new("Frame")
-	cluster.Name = "TopLeftStatus"
-	cluster.Position = UDim2.fromOffset(14, 12)
-	cluster.Size = UDim2.fromOffset(192, 134)
+	cluster.Name = "BottomLeftWallet"
+	cluster.AnchorPoint = Vector2.new(0, 1)
+	cluster.Position = UDim2.new(0, 20, 1, -24)
+	cluster.Size = UDim2.fromOffset(260, 64)
 	cluster.BackgroundTransparency = 1
 	cluster.Parent = gui
+	coinCluster = cluster
+	scaleInst.Parent = cluster
 
 	local clusterLayout = Instance.new("UIListLayout")
 	clusterLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -345,9 +308,9 @@ local function buildHudGui()
 	-- 1. Coins Pill
 	local coinsCard = Instance.new("Frame")
 	coinsCard.Name = "CoinsPill"
-	coinsCard.Size = UDim2.fromOffset(186, 40)
-	coinsCard.BackgroundColor3 = Color3.fromRGB(24, 28, 38)
-	coinsCard.BackgroundTransparency = 0.08
+	coinsCard.Size = UDim2.fromOffset(260, 64)
+	coinsCard.BackgroundColor3 = Color3.fromRGB(255, 239, 196)
+	coinsCard.BackgroundTransparency = 1
 	coinsCard.BorderSizePixel = 0
 	coinsCard.LayoutOrder = 1
 	coinsCard.Parent = cluster
@@ -356,177 +319,46 @@ local function buildHudGui()
 	cScale.Parent = coinsCard
 	coinsScaleInst = cScale
 
-	local coinsCorner = Instance.new("UICorner")
-	coinsCorner.CornerRadius = UDim.new(0, 12)
-	coinsCorner.Parent = coinsCard
-
-	local coinsStroke = Instance.new("UIStroke")
-	coinsStroke.Color = Color3.fromRGB(246, 198, 68)
-	coinsStroke.Thickness = 1.6
-	coinsStroke.Parent = coinsCard
-
-	local coinIcon = Instance.new("TextLabel")
-	coinIcon.Name = "CoinIcon"
-	coinIcon.AnchorPoint = Vector2.new(0, 0.5)
-	coinIcon.Position = UDim2.new(0, 8, 0.5, 0)
-	coinIcon.Size = UDim2.fromOffset(26, 26)
-	coinIcon.BackgroundColor3 = Color3.fromRGB(248, 194, 48)
-	coinIcon.BorderSizePixel = 0
-	coinIcon.Font = Enum.Font.GothamBlack
-	coinIcon.TextSize = 14
-	coinIcon.TextColor3 = Color3.fromRGB(62, 42, 8)
-	coinIcon.Text = "C"
-	coinIcon.Parent = coinsCard
-
-	local coinIconCorner = Instance.new("UICorner")
-	coinIconCorner.CornerRadius = UDim.new(1, 0)
-	coinIconCorner.Parent = coinIcon
-
 	local coinsLbl = Instance.new("TextLabel")
 	coinsLbl.Name = "CoinsValue"
-	coinsLbl.Position = UDim2.fromOffset(42, 0)
-	coinsLbl.Size = UDim2.new(1, -112, 1, 0)
+	coinsLbl.Position = UDim2.fromOffset(6, 0)
+	coinsLbl.Size = UDim2.new(1, -12, 0, 56)
 	coinsLbl.BackgroundTransparency = 1
-	coinsLbl.Font = Enum.Font.GothamBlack
-	coinsLbl.TextSize = 17
+	coinsLbl.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Heavy, Enum.FontStyle.Italic)
+	coinsLbl.TextSize = 48
+	coinsLbl.TextScaled = true
 	coinsLbl.TextXAlignment = Enum.TextXAlignment.Left
-	coinsLbl.TextColor3 = Color3.fromRGB(255, 224, 102)
-	coinsLbl.Text = "100"
+	coinsLbl.TextColor3 = Color3.fromRGB(115, 239, 0)
+	coinsLbl.TextStrokeTransparency = 1
+	coinsLbl.Text = "$0"
 	coinsLbl.Parent = coinsCard
+	local cashOutline = Instance.new("UIStroke")
+	cashOutline.Color = Color3.fromRGB(9, 22, 7)
+	cashOutline.Thickness = 4
+	cashOutline.LineJoinMode = Enum.LineJoinMode.Round
+	cashOutline.Parent = coinsLbl
+	local valueLimit = Instance.new("UITextSizeConstraint")
+	valueLimit.MinTextSize = 24
+	valueLimit.MaxTextSize = 48
+	valueLimit.Parent = coinsLbl
 	coinsTextLabel = coinsLbl
 
 	local incomeLbl = Instance.new("TextLabel")
 	incomeLbl.Name = "IncomePerSecond"
-	incomeLbl.AnchorPoint = Vector2.new(1, 0.5)
-	incomeLbl.Position = UDim2.new(1, -8, 0.5, 0)
-	incomeLbl.Size = UDim2.fromOffset(66, 20)
+	incomeLbl.AnchorPoint = Vector2.new(0, 0)
+	incomeLbl.Position = UDim2.fromOffset(10, 53)
+	incomeLbl.Size = UDim2.new(1, -20, 0, 16)
 	incomeLbl.BackgroundTransparency = 1
 	incomeLbl.Font = Enum.Font.GothamBold
 	incomeLbl.TextSize = 11
-	incomeLbl.TextColor3 = Color3.fromRGB(80, 227, 120)
-	incomeLbl.TextXAlignment = Enum.TextXAlignment.Right
+	incomeLbl.TextColor3 = Color3.fromRGB(160, 242, 183)
+	incomeLbl.TextStrokeColor3 = Color3.fromRGB(26, 44, 49)
+	incomeLbl.TextStrokeTransparency = 0
+	incomeLbl.TextXAlignment = Enum.TextXAlignment.Left
 	incomeLbl.Text = "+0/dtk"
 	incomeLbl.Visible = false
 	incomeLbl.Parent = coinsCard
 	incomeTextLabel = incomeLbl
-
-	-- 2. Bag Capacity Pill (e.g. Tas 12/20 + Lv.1 + fill bar)
-	local bagCard = Instance.new("Frame")
-	bagCard.Name = "BagPill"
-	bagCard.Size = UDim2.fromOffset(186, 44)
-	bagCard.BackgroundColor3 = Color3.fromRGB(24, 28, 38)
-	bagCard.BackgroundTransparency = 0.08
-	bagCard.BorderSizePixel = 0
-	bagCard.LayoutOrder = 2
-	bagCard.Parent = cluster
-
-	local bagCorner = Instance.new("UICorner")
-	bagCorner.CornerRadius = UDim.new(0, 12)
-	bagCorner.Parent = bagCard
-
-	local bStroke = Instance.new("UIStroke")
-	bStroke.Color = Color3.fromRGB(98, 112, 142)
-	bStroke.Thickness = 1.5
-	bStroke.Parent = bagCard
-	bagStrokeInst = bStroke
-
-	local bagLbl = Instance.new("TextLabel")
-	bagLbl.Name = "BagValue"
-	bagLbl.Position = UDim2.fromOffset(12, 4)
-	bagLbl.Size = UDim2.new(1, -60, 0, 22)
-	bagLbl.BackgroundTransparency = 1
-	bagLbl.Font = Enum.Font.GothamBlack
-	bagLbl.TextSize = 14
-	bagLbl.TextXAlignment = Enum.TextXAlignment.Left
-	bagLbl.TextColor3 = Color3.fromRGB(244, 247, 252)
-	bagLbl.Text = "Tas 0/20"
-	bagLbl.Parent = bagCard
-	bagTextLabel = bagLbl
-
-	local lvBadge = Instance.new("TextLabel")
-	lvBadge.Name = "BagLevelBadge"
-	lvBadge.AnchorPoint = Vector2.new(1, 0)
-	lvBadge.Position = UDim2.new(1, -8, 0, 6)
-	lvBadge.Size = UDim2.fromOffset(40, 18)
-	lvBadge.BackgroundColor3 = Color3.fromRGB(44, 52, 72)
-	lvBadge.BorderSizePixel = 0
-	lvBadge.Font = Enum.Font.GothamBold
-	lvBadge.TextSize = 11
-	lvBadge.TextColor3 = Color3.fromRGB(190, 204, 232)
-	lvBadge.Text = "Lv.1"
-	lvBadge.Parent = bagCard
-	bagLevelBadge = lvBadge
-
-	local lvCorner = Instance.new("UICorner")
-	lvCorner.CornerRadius = UDim.new(0, 5)
-	lvCorner.Parent = lvBadge
-
-	local barTrack = Instance.new("Frame")
-	barTrack.Name = "BarTrack"
-	barTrack.Position = UDim2.fromOffset(10, 30)
-	barTrack.Size = UDim2.new(1, -20, 0, 7)
-	barTrack.BackgroundColor3 = Color3.fromRGB(16, 19, 26)
-	barTrack.BorderSizePixel = 0
-	barTrack.Parent = bagCard
-
-	local barTrackCorner = Instance.new("UICorner")
-	barTrackCorner.CornerRadius = UDim.new(1, 0)
-	barTrackCorner.Parent = barTrack
-
-	local barFill = Instance.new("Frame")
-	barFill.Name = "BarFill"
-	barFill.Size = UDim2.fromScale(0, 1)
-	barFill.BackgroundColor3 = Color3.fromRGB(72, 198, 128)
-	barFill.BorderSizePixel = 0
-	barFill.Parent = barTrack
-	bagFillFrame = barFill
-
-	local barFillCorner = Instance.new("UICorner")
-	barFillCorner.CornerRadius = UDim.new(1, 0)
-	barFillCorner.Parent = barFill
-
-	-- 3. Egg Bag Pill (Click to open Incubator)
-	local eggCard = Instance.new("TextButton")
-	eggCard.Name = "EggPill"
-	eggCard.Size = UDim2.fromOffset(146, 30)
-	eggCard.BackgroundColor3 = Color3.fromRGB(24, 28, 38)
-	eggCard.BackgroundTransparency = 0.14
-	eggCard.BorderSizePixel = 0
-	eggCard.Text = ""
-	eggCard.AutoButtonColor = true
-	eggCard.LayoutOrder = 3
-	eggCard.Parent = cluster
-
-	local eggCorner = Instance.new("UICorner")
-	eggCorner.CornerRadius = UDim.new(0, 9)
-	eggCorner.Parent = eggCard
-
-	local eggStroke = Instance.new("UIStroke")
-	eggStroke.Color = Color3.fromRGB(82, 94, 120)
-	eggStroke.Thickness = 1.2
-	eggStroke.Parent = eggCard
-
-	local eggLbl = Instance.new("TextLabel")
-	eggLbl.Name = "EggValue"
-	eggLbl.Position = UDim2.fromOffset(10, 0)
-	eggLbl.Size = UDim2.new(1, -16, 1, 0)
-	eggLbl.BackgroundTransparency = 1
-	eggLbl.Font = Enum.Font.GothamBold
-	eggLbl.TextSize = 12
-	eggLbl.TextXAlignment = Enum.TextXAlignment.Left
-	eggLbl.TextColor3 = Color3.fromRGB(205, 214, 232)
-	eggLbl.Text = "Telur 0/5"
-	eggLbl.Parent = eggCard
-	eggTextLabel = eggLbl
-
-	eggCard.Activated:Connect(function()
-		local controllers = script.Parent
-		local baseCtrl = controllers and controllers:FindFirstChild("BaseController")
-		if baseCtrl then
-			local BaseController = require(baseCtrl)
-			BaseController.OpenIncubatorModal(1)
-		end
-	end)
 
 	-- Top-center Drop Notification Feed
 	local dropContainer = Instance.new("Frame")
@@ -536,6 +368,9 @@ local function buildHudGui()
 	dropContainer.Size = UDim2.fromOffset(346, 190)
 	dropContainer.BackgroundTransparency = 1
 	dropContainer.Parent = gui
+	local feedScale = Instance.new("UIScale")
+	feedScale.Parent = dropContainer
+	dropScale = feedScale
 	dropBannerContainer = dropContainer
 
 	local dropListLayout = Instance.new("UIListLayout")
@@ -544,6 +379,7 @@ local function buildHudGui()
 	dropListLayout.Padding = UDim.new(0, 6)
 	dropListLayout.Parent = dropContainer
 
+	updateResponsiveScale()
 	syncFromAttributes(false)
 end
 

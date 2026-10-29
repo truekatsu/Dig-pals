@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
@@ -33,6 +34,12 @@ type MoundVisualEntry = {
 	PrimaryPart: Part,
 	FillFrame: Frame,
 	HPLabel: TextLabel,
+	Billboard: BillboardGui,
+	TrailFrame: Frame,
+	FillTween: Tween?,
+	TrailTween: Tween?,
+	HitVersion: number,
+	LastHP: number,
 	Highlight: Highlight,
 	MaxHP: number,
 	IsHovered: boolean,
@@ -43,6 +50,7 @@ local MoundVisuals = {}
 local activeVisuals: { [string]: MoundVisualEntry } = {}
 local clickCallbacks: { MoundClickedCallback } = {}
 local selectedMoundId: string? = nil
+local diggingMoundId: string? = nil
 local hoveredEntry: MoundVisualEntry? = nil
 local containerFolder: Folder? = nil
 local started = false
@@ -84,6 +92,30 @@ function MoundVisuals.SetSelectedMound(moundId: string?)
 	end
 end
 
+-- Selection/hover alone never reveals health. Only a confirmed dig session does.
+function MoundVisuals.SetDiggingMound(moundId: string?)
+	diggingMoundId = moundId
+	for id, entry in activeVisuals do
+		local enabled = id == moundId
+		if not enabled and entry.Billboard.Enabled then
+			entry.HitVersion += 1
+			if entry.FillTween then entry.FillTween:Cancel() end
+			if entry.TrailTween then entry.TrailTween:Cancel() end
+			local ratio = if entry.MaxHP > 0 then math.clamp(entry.LastHP / entry.MaxHP, 0, 1) else 0
+			entry.FillFrame.Size = UDim2.fromScale(ratio, 1)
+			entry.TrailFrame.Size = UDim2.fromScale(ratio, 1)
+		end
+		if enabled and not entry.Billboard.Enabled then
+			local scale = entry.Billboard.Container:FindFirstChildOfClass("UIScale")
+			if scale then
+				scale.Scale = 0.92
+				TweenService:Create(scale, TweenInfo.new(0.18, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+			end
+		end
+		entry.Billboard.Enabled = enabled
+	end
+end
+
 function MoundVisuals.OnMoundClicked(callback: MoundClickedCallback)
 	table.insert(clickCallbacks, callback)
 end
@@ -108,55 +140,84 @@ local function createBillboard(
 	hp: number,
 	maxHp: number,
 	isShared: boolean?
-): (Frame, TextLabel)
+): (Frame, TextLabel, BillboardGui, Frame)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "MoundBillboard"
-	billboard.Size = if isShared then UDim2.fromOffset(175, 54) else UDim2.fromOffset(145, 50)
+	billboard.Enabled = false
+	billboard.Size = UDim2.fromOffset(188, 62)
 	billboard.StudsOffset = Vector3.new(0, (parentPart.Size.Y * 0.5) + 2.3, 0)
 	billboard.AlwaysOnTop = false
-	billboard.MaxDistance = if isShared then 250 else 90
+	billboard.MaxDistance = if isShared then 110 else 70
 	billboard.Parent = parentPart
 
 	local bg = Instance.new("Frame")
 	bg.Name = "Container"
 	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-	bg.BackgroundTransparency = 0.2
+	bg.BackgroundColor3 = Color3.fromRGB(29, 49, 55)
+	bg.BackgroundTransparency = 0.04
 	bg.BorderSizePixel = 0
 	bg.Parent = billboard
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = bg
+	local outline = Instance.new("UIStroke")
+	outline.Color = Color3.fromRGB(13, 27, 30)
+	outline.Thickness = 2
+	outline.Parent = bg
+	Instance.new("UIScale").Parent = bg
+	local heart = Instance.new("TextLabel")
+	heart.Name = "Heart"
+	heart.Position = UDim2.fromOffset(8, 5)
+	heart.Size = UDim2.fromOffset(22, 22)
+	heart.BackgroundTransparency = 1
+	heart.Font = Enum.Font.GothamBlack
+	heart.Text = "♥"
+	heart.TextSize = 20
+	heart.TextColor3 = Color3.fromRGB(255, 121, 114)
+	heart.Parent = bg
 
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
-	title.Size = UDim2.new(1, -8, 0, 18)
-	title.Position = UDim2.fromOffset(4, 3)
+	title.Size = UDim2.new(1, -44, 0, 22)
+	title.Position = UDim2.fromOffset(34, 5)
 	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBold
-	title.TextSize = 13
+	title.Font = Enum.Font.FredokaOne
+	title.TextSize = 14
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.TextTruncate = Enum.TextTruncate.AtEnd
 	title.TextColor3 = if isShared then Color3.fromRGB(255, 220, 80) else Color3.fromRGB(255, 240, 200)
-	title.Text = if isShared then "[RARE] " .. titleText else titleText
+	title.Text = titleText
 	title.Parent = bg
 
 	local barBg = Instance.new("Frame")
 	barBg.Name = "BarBackground"
-	barBg.Size = UDim2.new(1, -12, 0, 18)
-	barBg.Position = UDim2.fromOffset(6, 25)
-	barBg.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
+	barBg.Size = UDim2.new(1, -16, 0, 21)
+	barBg.Position = UDim2.fromOffset(8, 33)
+	barBg.BackgroundColor3 = Color3.fromRGB(12, 29, 33)
 	barBg.BorderSizePixel = 0
 	barBg.Parent = bg
 
 	local barCorner = Instance.new("UICorner")
 	barCorner.CornerRadius = UDim.new(0, 6)
 	barCorner.Parent = barBg
+	local trail = Instance.new("Frame")
+	trail.Name = "DamageTrail"
+	trail.Size = UDim2.fromScale(if maxHp > 0 then math.clamp(hp / maxHp, 0, 1) else 0, 1)
+	trail.BackgroundColor3 = Color3.fromRGB(255, 207, 110)
+	trail.BorderSizePixel = 0
+	trail.ZIndex = 2
+	trail.Parent = barBg
+	local trailCorner = Instance.new("UICorner")
+	trailCorner.CornerRadius = UDim.new(0, 6)
+	trailCorner.Parent = trail
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	local ratio = if maxHp > 0 then math.clamp(hp / maxHp, 0, 1) else 0
 	fill.Size = UDim2.fromScale(ratio, 1)
-	fill.BackgroundColor3 = if isShared then Color3.fromRGB(240, 180, 50) else Color3.fromRGB(95, 210, 105)
+	fill.BackgroundColor3 = Color3.fromRGB(66, 199, 151)
+	fill.ZIndex = 3
 	fill.BorderSizePixel = 0
 	fill.Parent = barBg
 
@@ -168,15 +229,16 @@ local function createBillboard(
 	hpLabel.Name = "HPLabel"
 	hpLabel.Size = UDim2.fromScale(1, 1)
 	hpLabel.BackgroundTransparency = 1
-	hpLabel.Font = Enum.Font.GothamBold
-	hpLabel.TextSize = 11
+	hpLabel.Font = Enum.Font.FredokaOne
+	hpLabel.TextSize = 13
 	hpLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	hpLabel.TextStrokeTransparency = 0.5
+	hpLabel.TextStrokeTransparency = 0.15
+	hpLabel.TextStrokeColor3 = Color3.fromRGB(16, 44, 39)
 	hpLabel.Text = string.format("%d / %d HP", math.ceil(hp), math.ceil(maxHp))
-	hpLabel.ZIndex = 2
+	hpLabel.ZIndex = 4
 	hpLabel.Parent = barBg
 
-	return fill, hpLabel
+	return fill, hpLabel, billboard, trail
 end
 
 function MoundVisuals.SpawnMound(data: MoundVisualPayload)
@@ -218,7 +280,7 @@ function MoundVisuals.SpawnMound(data: MoundVisualPayload)
 	-- NOTE: Roblox never forwards clicks to ClickDetectors while a Tool is held, so mound clicks are handled
 	-- by MoundVisuals.Start() via a character-ignoring cursor raycast (works with and without the shovel held).
 	model.PrimaryPart = basePart
-	local fillFrame, hpLabel = createBillboard(basePart, displayName, data.HP, data.MaxHP, data.IsShared == true)
+	local fillFrame, hpLabel, billboard, trail = createBillboard(basePart, displayName, data.HP, data.MaxHP, data.IsShared == true)
 	model.Parent = getContainerFolder()
 
 	local entry: MoundVisualEntry = {
@@ -228,11 +290,18 @@ function MoundVisuals.SpawnMound(data: MoundVisualPayload)
 		PrimaryPart = basePart,
 		FillFrame = fillFrame,
 		HPLabel = hpLabel,
+		Billboard = billboard,
+		TrailFrame = trail,
+		FillTween = nil,
+		TrailTween = nil,
+		HitVersion = 0,
+		LastHP = data.HP,
 		Highlight = highlight,
 		MaxHP = data.MaxHP,
 		IsHovered = false,
 	}
 	activeVisuals[data.Id] = entry
+	billboard.Enabled = diggingMoundId == data.Id
 	refreshEntryHighlight(entry)
 end
 
@@ -306,7 +375,33 @@ function MoundVisuals.UpdateMoundHP(moundId: string, currentHp: number, maxHp: n
 	local effectiveMax = maxHp or entry.MaxHP
 	entry.MaxHP = effectiveMax
 	local ratio = if effectiveMax > 0 then math.clamp(currentHp / effectiveMax, 0, 1) else 0
-	entry.FillFrame.Size = UDim2.fromScale(ratio, 1)
+	entry.HitVersion += 1
+	local version = entry.HitVersion
+	if entry.FillTween then entry.FillTween:Cancel() end
+	if entry.TrailTween then entry.TrailTween:Cancel() end
+	local color = if ratio <= 0.25 then Color3.fromRGB(242, 104, 91)
+		elseif ratio <= 0.5 then Color3.fromRGB(243, 187, 69)
+		else Color3.fromRGB(66, 199, 151)
+	if entry.Billboard.Enabled then
+		entry.FillTween = TweenService:Create(entry.FillFrame, TweenInfo.new(0.16, Enum.EasingStyle.Quad), {
+			Size = UDim2.fromScale(ratio, 1), BackgroundColor3 = color,
+		})
+		entry.FillTween:Play()
+		if currentHp < entry.LastHP then
+			task.delay(0.18, function()
+				if activeVisuals[moundId] ~= entry or entry.HitVersion ~= version or not entry.Billboard.Enabled then return end
+				entry.TrailTween = TweenService:Create(entry.TrailFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad), { Size = UDim2.fromScale(ratio, 1) })
+				entry.TrailTween:Play()
+			end)
+		else
+			entry.TrailFrame.Size = UDim2.fromScale(ratio, 1)
+		end
+	else
+		entry.FillFrame.Size = UDim2.fromScale(ratio, 1)
+		entry.FillFrame.BackgroundColor3 = color
+		entry.TrailFrame.Size = UDim2.fromScale(ratio, 1)
+	end
+	entry.LastHP = currentHp
 	entry.HPLabel.Text = string.format("%d / %d HP", math.max(0, math.ceil(currentHp)), math.ceil(effectiveMax))
 end
 
@@ -316,6 +411,9 @@ function MoundVisuals.RemoveMound(moundId: string)
 		return
 	end
 	activeVisuals[moundId] = nil
+	if entry.FillTween then entry.FillTween:Cancel() end
+	if entry.TrailTween then entry.TrailTween:Cancel() end
+	if diggingMoundId == moundId then diggingMoundId = nil end
 	if selectedMoundId == moundId then
 		selectedMoundId = nil
 	end

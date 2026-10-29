@@ -3,6 +3,21 @@
 
 local Format = {}
 
+-- Currency display only; saved balances and remote payloads keep their existing schema.
+function Format.Money(amount: number, compact: boolean?): string
+	local value = math.max(0, math.floor(amount))
+	if not compact then return "$" .. Format.Commas(value) end
+	local suffixes = { "", "K", "M", "B", "T" }
+	local tier = 1
+	while value >= 999.95 and tier < #suffixes do
+		value /= 1000
+		tier += 1
+	end
+	if tier == 1 then return "$" .. tostring(value) end
+	local digits = string.format("%.1f", value):gsub("%.0$", "")
+	return "$" .. digits .. suffixes[tier]
+end
+
 function Format.Commas(value: number): string
 	local rounded = math.floor(value)
 	local formatted = tostring(rounded)

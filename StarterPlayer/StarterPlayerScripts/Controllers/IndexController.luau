@@ -1,4 +1,5 @@
 --!strict
+local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 -- Client controller for Pet & Item Index modal, discovery silhouettes, and completion milestone celebrations (Step 12)
 
 local Players = game:GetService("Players")
@@ -256,7 +257,8 @@ local function renderContent()
 				valLbl.Font = Enum.Font.GothamMedium
 				valLbl.TextSize = 10
 				valLbl.TextColor3 = if isFound then Color3.fromRGB(255, 215, 90) else Color3.fromRGB(90, 90, 100)
-				valLbl.Text = if isFound then string.format("%d Coins", it.SellPrice) else "Terkunci"
+				if isFound then CurrencyStyle.Apply(valLbl) end
+				valLbl.Text = if isFound then string.format("$%d", it.SellPrice) else "Terkunci"
 				valLbl.Parent = card
 			end
 		end
@@ -579,10 +581,7 @@ function IndexController.Start()
 		"ToggleIndexModalKey",
 		function(_actionName, inputState, inputObject)
 			if inputState == Enum.UserInputState.Begin then
-				if inputObject.KeyCode == Enum.KeyCode.Four or inputObject.KeyCode == Enum.KeyCode.KeypadFour then
-					IndexController.Toggle()
-					return Enum.ContextActionResult.Sink
-				elseif inputObject.KeyCode == Enum.KeyCode.Escape and isOpen then
+				if inputObject.KeyCode == Enum.KeyCode.Escape and isOpen then
 					IndexController.Close()
 					return Enum.ContextActionResult.Sink
 				end
@@ -590,8 +589,6 @@ function IndexController.Start()
 			return Enum.ContextActionResult.Pass
 		end,
 		false,
-		Enum.KeyCode.Four,
-		Enum.KeyCode.KeypadFour,
 		Enum.KeyCode.Escape
 	)
 

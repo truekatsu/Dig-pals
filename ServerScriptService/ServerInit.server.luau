@@ -2842,7 +2842,7 @@ task.spawn(function()
 	runStep10Verification()
 	runStep11Verification()
 	runStep12Verification()
-	runStep13Verification()
+	-- Global rankings must never be seeded with the Ranker test fixtures at startup.
 	runStep14Verification()
 	runStep16Verification()
 	runStep17QAVerification()

@@ -154,6 +154,7 @@ local function clearBagFullLockedState()
 end
 
 local function showBagFullLockedState(moundId: string, moundSize: string)
+	MoundVisuals.SetDiggingMound(nil)
 	activeMoundId = nil
 	bagFullLockedMoundId = moundId
 	applyMoundTimingConfig(moundSize)
@@ -215,6 +216,7 @@ local function unbindMinigameControls()
 end
 
 function DigController.StopMinigame(notifyServer: boolean)
+	MoundVisuals.SetDiggingMound(nil)
 	bagFullLockedMoundId = nil
 	if not activeMoundId then
 		if hudContainer then
@@ -293,6 +295,7 @@ function DigController.StartMinigameOnMound(moundId: string, moundSize: string, 
 
 	bagFullLockedMoundId = nil
 	activeMoundId = moundId
+	MoundVisuals.SetDiggingMound(nil)
 	activeMoundSize = moundSize
 	sessionStartTime = workspace:GetServerTimeNow()
 	applyMoundTimingConfig(moundSize)
@@ -548,11 +551,7 @@ function DigController.Start()
 	end)
 
 	LocalPlayer.CharacterAdded:Connect(function()
-		if activeMoundId then
-			task.defer(function()
-				setCharacterJumpEnabled(false)
-			end)
-		end
+		DigController.StopMinigame(true)
 	end)
 
 	Remotes.GetEvent("MoundDespawned").OnClientEvent:Connect(function(moundId: string)
@@ -569,6 +568,7 @@ function DigController.Start()
 		end
 		if payload.Event == "SessionStarted" then
 			if payload.MoundId == activeMoundId then
+				MoundVisuals.SetDiggingMound(activeMoundId)
 				sessionStartTime = tonumber(payload.StartTime) or workspace:GetServerTimeNow()
 				barSpeed = tonumber(payload.Speed) or barSpeed
 				goodWidth = tonumber(payload.GoodWidth) or goodWidth

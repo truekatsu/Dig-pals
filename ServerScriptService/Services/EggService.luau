@@ -231,7 +231,7 @@ function EggService.SpeedUpIncubatorInProfile(
 		return {
 			Success = false,
 			Reason = "InsufficientCoins",
-			Message = string.format("Coin belum cukup untuk mempercepat! Butuh %d Coin.", cost),
+			Message = string.format("Uang belum cukup untuk mempercepat! Butuh $%d.", cost),
 		}
 	end
 

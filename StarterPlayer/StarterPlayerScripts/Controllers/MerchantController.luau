@@ -1,4 +1,5 @@
 --!strict
+local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 -- Client UI controller for Hub & Base Item Merchant: per-item sell, sell all, and BagLevel upgrades (Step 6)
 
 local Players = game:GetService("Players")
@@ -137,7 +138,7 @@ local function refreshRightSummaryAndHeader()
 		headerTitleLabel.Text = merchantTitle
 	end
 	if headerCoinsPill then
-		headerCoinsPill.Text = string.format("%s Coin", Format.Commas(coinsBalance))
+		headerCoinsPill.Text = Format.Money(coinsBalance)
 	end
 	if headerBagPill then
 		headerBagPill.Text = string.format("Tas %d/%d | Lv.%d", totalCount, bagCap, bagLevel)
@@ -147,7 +148,7 @@ local function refreshRightSummaryAndHeader()
 		summaryCountLabel.Text = string.format("Total di Tas: %d / %d Item", totalCount, bagCap)
 	end
 	if summaryValueLabel then
-		summaryValueLabel.Text = string.format("Total Nilai Jual: +%s Coin", Format.Commas(totalValue))
+		summaryValueLabel.Text = string.format("Total Nilai Jual: +$%s", Format.Commas(totalValue))
 	end
 
 	if sellAllButton then
@@ -158,7 +159,7 @@ local function refreshRightSummaryAndHeader()
 			sellAllButton.Active = false
 			sellAllButton.AutoButtonColor = false
 		elseif totalCount > 0 then
-			sellAllButton.Text = string.format("JUAL SEMUA (+%s Coin)", Format.Commas(totalValue))
+			sellAllButton.Text = string.format("JUAL SEMUA (+$%s)", Format.Commas(totalValue))
 			sellAllButton.BackgroundColor3 = COLORS.BtnSellAll
 			sellAllButton.TextColor3 = COLORS.TextPrimary
 			sellAllButton.Active = true
@@ -206,7 +207,7 @@ local function refreshRightSummaryAndHeader()
 			upgradeCapLabel.Text = string.format("Kapasitas: %d Item  ->  %d Item", bagCap, nextCap)
 		end
 		if upgradeCostLabel then
-			upgradeCostLabel.Text = string.format("Biaya Upgrade: %s Coin", Format.Commas(cost))
+			upgradeCostLabel.Text = string.format("Biaya Upgrade: $%s", Format.Commas(cost))
 			upgradeCostLabel.TextColor3 = if canAfford then COLORS.TextGold else COLORS.TextError
 		end
 		if upgradeButton then
@@ -217,13 +218,13 @@ local function refreshRightSummaryAndHeader()
 				upgradeButton.Active = false
 				upgradeButton.AutoButtonColor = false
 			elseif canAfford then
-				upgradeButton.Text = string.format("UPGRADE TAS (%s Coin)", Format.Commas(cost))
+				upgradeButton.Text = string.format("UPGRADE TAS ($%s)", Format.Commas(cost))
 				upgradeButton.BackgroundColor3 = COLORS.BtnUpgrade
 				upgradeButton.TextColor3 = Color3.fromRGB(36, 24, 6)
 				upgradeButton.Active = true
 				upgradeButton.AutoButtonColor = true
 			else
-				upgradeButton.Text = string.format("COIN KURANG (%s Coin)", Format.Commas(cost))
+				upgradeButton.Text = string.format("UANG KURANG ($%s)", Format.Commas(cost))
 				upgradeButton.BackgroundColor3 = COLORS.BtnDisabled
 				upgradeButton.TextColor3 = COLORS.TextMuted
 				upgradeButton.Active = false
@@ -344,7 +345,7 @@ local function rebuildItemRows()
 		subLbl.TextXAlignment = Enum.TextXAlignment.Left
 		subLbl.TextTruncate = Enum.TextTruncate.AtEnd
 		subLbl.TextColor3 = COLORS.TextSecondary
-		subLbl.Text = string.format("%s | %s Coin", cfg.Rarity, Format.Commas(unitPrice))
+		subLbl.Text = string.format("%s | $%s", cfg.Rarity, Format.Commas(unitPrice))
 		subLbl.Parent = row
 
 		local sellOneBtn = Instance.new("TextButton")
@@ -497,7 +498,7 @@ function MerchantController.RequestSellItem(itemId: string, count: number): (boo
 		local sold = tonumber(response.SoldCount) or count
 		local cfg = ItemsConfig.All[itemId]
 		local name = if cfg then cfg.DisplayName else itemId
-		setStatusBanner(string.format("Terjual %dx %s (+%s Coin)!", sold, name, Format.Commas(earned)), false)
+		setStatusBanner(string.format("Terjual %dx %s (+$%s)!", sold, name, Format.Commas(earned)), false)
 		refreshRightSummaryAndHeader()
 		return true, nil
 	else
@@ -531,7 +532,7 @@ function MerchantController.RequestSellAll(): (boolean, string?)
 	if response.Success == true then
 		local earned = tonumber(response.CoinsEarned) or 0
 		local sold = tonumber(response.SoldCount) or 0
-		setStatusBanner(string.format("Berhasil menjual %d item (+%s Coin)!", sold, Format.Commas(earned)), false)
+		setStatusBanner(string.format("Berhasil menjual %d item (+$%s)!", sold, Format.Commas(earned)), false)
 		refreshRightSummaryAndHeader()
 		return true, nil
 	else
@@ -695,10 +696,11 @@ local function buildMerchantGui()
 	coinsPill.Font = Enum.Font.GothamBlack
 	coinsPill.TextSize = 12
 	coinsPill.TextColor3 = COLORS.TextGold
-	coinsPill.Text = "100 Coin"
+	coinsPill.Text = "$100"
 	coinsPill.ZIndex = 12
 	coinsPill.Parent = header
 	headerCoinsPill = coinsPill
+	CurrencyStyle.Balance(coinsPill)
 
 	local coinsPillCorner = Instance.new("UICorner")
 	coinsPillCorner.CornerRadius = UDim.new(1, 0)
@@ -858,7 +860,7 @@ local function buildMerchantGui()
 	sVal.TextSize = 14
 	sVal.TextXAlignment = Enum.TextXAlignment.Left
 	sVal.TextColor3 = COLORS.TextGold
-	sVal.Text = "Total Nilai Jual: +0 Coin"
+	sVal.Text = "Total Nilai Jual: +$0"
 	sVal.Parent = sellCard
 	summaryValueLabel = sVal
 
@@ -970,7 +972,7 @@ local function buildMerchantGui()
 	uCost.TextSize = 12
 	uCost.TextXAlignment = Enum.TextXAlignment.Left
 	uCost.TextColor3 = COLORS.TextGold
-	uCost.Text = "Biaya Upgrade: 300 Coin"
+	uCost.Text = "Biaya Upgrade: $300"
 	uCost.Parent = upgCard
 	upgradeCostLabel = uCost
 
@@ -984,7 +986,7 @@ local function buildMerchantGui()
 	upgBtn.Font = Enum.Font.GothamBlack
 	upgBtn.TextSize = 14
 	upgBtn.TextColor3 = COLORS.TextMuted
-	upgBtn.Text = "UPGRADE TAS (300 Coin)"
+	upgBtn.Text = "UPGRADE TAS ($300)"
 	upgBtn.Parent = upgCard
 	upgradeButton = upgBtn
 

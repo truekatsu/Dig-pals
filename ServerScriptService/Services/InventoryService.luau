@@ -357,7 +357,7 @@ function InventoryService.UpgradeBagInProfile(profile: Types.PlayerProfile): Upg
 		return {
 			Success = false,
 			Reason = "InsufficientCoins",
-			Message = string.format("Coin belum cukup! Butuh %d Coin.", cost),
+			Message = string.format("Uang belum cukup! Butuh $%d.", cost),
 			NewBagLevel = profile.BagLevel,
 			NewCapacity = InventoryService.GetBagCapacity(profile),
 			CostPaid = 0,

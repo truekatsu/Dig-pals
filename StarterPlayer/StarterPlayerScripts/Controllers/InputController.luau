@@ -116,6 +116,18 @@ local function toggleLeaderboard()
 	end
 end
 
+local hotbarKeys = {
+	[Enum.KeyCode.One] = 1, [Enum.KeyCode.KeypadOne] = 1,
+	[Enum.KeyCode.Two] = 2, [Enum.KeyCode.KeypadTwo] = 2,
+	[Enum.KeyCode.Three] = 3, [Enum.KeyCode.KeypadThree] = 3,
+	[Enum.KeyCode.Four] = 4, [Enum.KeyCode.KeypadFour] = 4,
+	[Enum.KeyCode.Five] = 5, [Enum.KeyCode.KeypadFive] = 5,
+	[Enum.KeyCode.Six] = 6, [Enum.KeyCode.KeypadSix] = 6,
+	[Enum.KeyCode.Seven] = 7, [Enum.KeyCode.KeypadSeven] = 7,
+	[Enum.KeyCode.Eight] = 8, [Enum.KeyCode.KeypadEight] = 8,
+	[Enum.KeyCode.Nine] = 9, [Enum.KeyCode.KeypadNine] = 9,
+}
+
 local function handleInputBegan(input: InputObject, gameProcessed: boolean)
 	if isTextInputActive() then
 		return
@@ -136,12 +148,8 @@ local function handleInputBegan(input: InputObject, gameProcessed: boolean)
 	end
 
 	-- PC Keyboard Shortcuts
-	if key == Enum.KeyCode.One or key == Enum.KeyCode.KeypadOne then
-		InventoryController.SelectHotbarSlot(1)
-	elseif key == Enum.KeyCode.Two or key == Enum.KeyCode.KeypadTwo then
-		InventoryController.SelectHotbarSlot(2)
-	elseif key == Enum.KeyCode.Three or key == Enum.KeyCode.KeypadThree then
-		InventoryController.SelectHotbarSlot(3)
+	if hotbarKeys[key] then
+		InventoryController.SelectHotbarSlot(hotbarKeys[key])
 	elseif key == Enum.KeyCode.B then
 		toggleInventory()
 	elseif key == Enum.KeyCode.P then

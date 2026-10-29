@@ -275,7 +275,7 @@ local function refreshDetailPane()
 		local variantDigBonus = if stats.VariantCfg.DigSpeedBonus > 0 then string.format(" (+%d)", stats.VariantCfg.DigSpeedBonus) else ""
 
 		detailStatsLabel.Text = string.format(
-			"Power: %d%s\nDig Speed: %d/10%s (Jeda: %.2fs)\nMove Speed: %d studs/dtk\nJangkauan (Range): %d studs\nIncome: +%d Coin/dtk\nLevel: %d/20",
+			"Power: %d%s\nDig Speed: %d/10%s (Jeda: %.2fs)\nMove Speed: %d studs/dtk\nJangkauan (Range): %d studs\nIncome: +$%d/dtk\nLevel: %d/20",
 			stats.Power,
 			variantPowerBonus,
 			stats.DigSpeed,
@@ -300,11 +300,11 @@ local function refreshDetailPane()
 			levelUpButton.BackgroundColor3 = COLORS.BtnDisabled
 			levelUpButton.Active = false
 		elseif cost and playerCoins < cost then
-			levelUpButton.Text = string.format("LEVEL UP (Lv. %d -> %d) - %s Coin", currentLevel, currentLevel + 1, Format.Commas(cost))
+			levelUpButton.Text = string.format("LEVEL UP (Lv. %d -> %d) - $%s", currentLevel, currentLevel + 1, Format.Commas(cost))
 			levelUpButton.BackgroundColor3 = COLORS.BtnDisabled
 			levelUpButton.Active = false
 		elseif cost then
-			levelUpButton.Text = string.format("LEVEL UP (Lv. %d -> %d) - %s Coin", currentLevel, currentLevel + 1, Format.Commas(cost))
+			levelUpButton.Text = string.format("LEVEL UP (Lv. %d -> %d) - $%s", currentLevel, currentLevel + 1, Format.Commas(cost))
 			levelUpButton.BackgroundColor3 = Color3.fromRGB(46, 178, 106)
 			levelUpButton.Active = not isBusy
 		end
@@ -363,7 +363,7 @@ local function refreshDetailPane()
 			releaseButton.BackgroundColor3 = COLORS.BtnDisabled
 			releaseButton.Active = false
 		else
-			releaseButton.Text = string.format("LEPAS PET (+%s Coin)", Format.Commas(stats.ReleasePrice))
+			releaseButton.Text = string.format("LEPAS PET (+$%s)", Format.Commas(stats.ReleasePrice))
 			releaseButton.BackgroundColor3 = COLORS.BtnDanger
 			releaseButton.Active = not isBusy
 		end
@@ -782,7 +782,7 @@ function PetBagController.RequestRelease()
 
 	if ok and type(response) == "table" and response.Success == true then
 		local coins = tonumber(response.CoinsEarned) or 0
-		setStatusMessage(string.format("Pet berhasil dilepas (+%s Coin)!", Format.Commas(coins)), false)
+		setStatusMessage(string.format("Pet berhasil dilepas (+$%s)!", Format.Commas(coins)), false)
 		selectedPetGuid = nil
 	else
 		local msg = if ok and type(response) == "table" and type(response.Message) == "string"
@@ -819,7 +819,7 @@ function PetBagController.RequestLevelUp()
 		setStatusMessage(string.format("Level up berhasil! Pet kini Lv. %d", newLv), false)
 	else
 		local reason = if ok and type(response) == "table" and response.ErrorReason then response.ErrorReason else "Gagal level up"
-		local msg = if reason == "InsufficientCoins" then "Coin tidak cukup untuk level up!"
+		local msg = if reason == "InsufficientCoins" then "Uang tidak cukup untuk level up!"
 			elseif reason == "MaxLevelReached" then "Pet sudah mencapai level maksimal (Lv. 20)!"
 			else reason
 		setStatusMessage(msg, true)
@@ -1340,7 +1340,7 @@ local function buildPetBagGui()
 	relBtn.Font = Enum.Font.GothamBold
 	relBtn.TextSize = 11
 	relBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	relBtn.Text = "LEPAS PET (+25 Coin)"
+	relBtn.Text = "LEPAS PET (+$25)"
 	relBtn.Visible = false
 	relBtn.Parent = actionsFrame
 	releaseButton = relBtn
