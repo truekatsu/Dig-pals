@@ -173,9 +173,15 @@ function DropService.RollSingleDrop(
 			then (eggRarityRaw :: Types.RarityName)
 			else "Common"
 
-		-- Absolute safeguard: regular mounds never drop Epic or Legendary eggs
-		if eggRarity == "Epic" or eggRarity == "Legendary" then
-			eggRarity = if (eggWeights.Rare or 0) > 0 then "Rare" else "Uncommon"
+		-- Safeguard against unintended rarities: if the mound's EggRarityWeights does not allow this rarity (weight <= 0), fallback to highest allowed
+		if (eggWeights[eggRarity] or 0) <= 0 then
+			if eggRarity == "Legendary" then
+				eggRarity = if (eggWeights.Epic or 0) > 0 then "Epic" elseif (eggWeights.Rare or 0) > 0 then "Rare" else "Uncommon"
+			elseif eggRarity == "Epic" then
+				eggRarity = if (eggWeights.Rare or 0) > 0 then "Rare" else "Uncommon"
+			elseif eggRarity == "Rare" then
+				eggRarity = if (eggWeights.Uncommon or 0) > 0 then "Uncommon" else "Common"
+			end
 		end
 
 		local eggConfig = pickEggForRarity(eggRarity)

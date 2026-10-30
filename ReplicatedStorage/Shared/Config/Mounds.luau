@@ -57,10 +57,10 @@ local Sizes: { [Types.MoundSizeName]: Types.MoundSizeConfig } = {
 			Item = 75,
 		},
 		EggRarityWeights = {
-			Common = 60,
+			Common = 50,
 			Uncommon = 35,
-			Rare = 5,
-			Epic = 0,
+			Rare = 12,
+			Epic = 3,
 			Legendary = 0,
 		},
 		RarityWeights = {
@@ -87,11 +87,11 @@ local Sizes: { [Types.MoundSizeName]: Types.MoundSizeConfig } = {
 			Item = 60,
 		},
 		EggRarityWeights = {
-			Common = 30,
-			Uncommon = 50,
-			Rare = 20,
-			Epic = 0,
-			Legendary = 0,
+			Common = 25,
+			Uncommon = 40,
+			Rare = 25,
+			Epic = 8.5,
+			Legendary = 1.5,
 		},
 		RarityWeights = {
 			Common = 30,
