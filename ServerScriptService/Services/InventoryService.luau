@@ -12,6 +12,7 @@ local EconomyConfig = require(Shared:WaitForChild("Config"):WaitForChild("Econom
 local BaseConfig = require(Shared:WaitForChild("Config"):WaitForChild("Base"))
 local ItemsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Items"))
 local EggsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Eggs"))
+local MerchantModelBuilder = require(Shared:WaitForChild("MerchantModelBuilder"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local PlayerState = require(script.Parent:WaitForChild("PlayerState"))
@@ -485,19 +486,31 @@ function InventoryService.EnsureMerchantWorldPrompts()
 	-- 1. Hub Item Merchant (Workspace.Plain.Merchant.ItemMerchant_Counter)
 	local plain = workspace:FindFirstChild("Plain")
 	local merchantFolder = plain and plain:FindFirstChild("Merchant")
+	if merchantFolder then MerchantModelBuilder.EnsureForWorld(merchantFolder) end
 	local hubCounter = merchantFolder and merchantFolder:FindFirstChild("ItemMerchant_Counter")
 	if hubCounter and hubCounter:IsA("BasePart") then
 		local oldBillboard = hubCounter:FindFirstChild("MerchantSignGui")
 		if oldBillboard then
 			oldBillboard:Destroy()
 		end
-		attachMerchantPrompt(
-			hubCounter,
-			"Hub",
-			"Item Merchant",
-			"Buka Toko Jual & Tas",
-			Vector3.new(0, 1.8, 0)
-		)
+		local oldAttachment = hubCounter:FindFirstChild("MerchantPromptAttachment")
+		if oldAttachment then oldAttachment:Destroy() end
+		local building = merchantFolder:FindFirstChild("TheMerchant")
+		local face = building and building:FindFirstChild("Merchant_NPC_Face", true)
+		if face and face:IsA("BasePart") then
+			face.CanQuery = true
+			attachMerchantPrompt(face, "Hub", "", "Bicara", Vector3.zero)
+			local prompt = face.MerchantPromptAttachment:FindFirstChildOfClass("ProximityPrompt")
+			if prompt then prompt.Style = Enum.ProximityPromptStyle.Custom end
+			if not face:FindFirstChild("MerchantTalkClick") then
+				local click = Instance.new("ClickDetector")
+				click.Name = "MerchantTalkClick"
+				click.MaxActivationDistance = 12
+				click.Parent = face
+			end
+		end
+		hubCounter:SetAttribute("DigPalsMerchantNode", true)
+		table.insert(merchantAnchorParts, hubCounter)
 	end
 
 	-- 2. Clean up any Base Merchants inside Plot1..Plot6 (Workspace.BasePlots)
@@ -542,6 +555,34 @@ function InventoryService.IsPlayerNearMerchant(player: Player, posOverride: Vect
 	return false
 end
 
+local function refreshHeldItems(player: Player)
+	local profile = PlayerState.Get(player)
+	for _, container in {player.Character, player:FindFirstChildOfClass("Backpack")} do
+		if container then
+			for _, tool in container:GetChildren() do
+				if tool:IsA("Tool") and tool:GetAttribute("DigPalsLootTool") == true then
+					local id = tool:GetAttribute("ItemId")
+					if not profile or type(id) ~= "string" or (profile.Items[id] or 0) < 1 then tool:Destroy() end
+				end
+			end
+		end
+	end
+end
+
+function InventoryService.HoldItem(player: Player, id: string)
+	return require(script.Parent.CarryHotbarService).Assign(player, "Items", id, id)
+end
+
+function InventoryService.SellHeldItem(player: Player)
+	local character = player.Character
+	local tool = character and character:FindFirstChildOfClass("Tool")
+	local id = tool and tool:GetAttribute("ItemId")
+	if not tool or tool:GetAttribute("DigPalsLootTool") ~= true or type(id) ~= "string" or not ItemsConfig.All[id] then
+		return {Success = false, Reason = "NoHeldItem", Message = "Hold an item from your inventory first."}
+	end
+	return InventoryService.SellItem(player, id, 1, false)
+end
+
 function InventoryService.SellItem(
 	player: Player,
 	itemId: string,
@@ -582,6 +623,7 @@ function InventoryService.SellItem(
 		}
 	end
 
+	if result.Success then refreshHeldItems(player) end
 	if result.Success and (result.CoinsEarned or 0) > 0 then
 		local QuestService = require(script.Parent:WaitForChild("QuestService"))
 		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
@@ -627,6 +669,7 @@ function InventoryService.SellAllItems(player: Player, bypassProximityForTest: b
 		}
 	end
 
+	if result.Success then refreshHeldItems(player) end
 	if result.Success and (result.CoinsEarned or 0) > 0 then
 		local QuestService = require(script.Parent:WaitForChild("QuestService"))
 		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
@@ -737,6 +780,8 @@ function InventoryService.Start()
 		end
 	end)
 
+	Remotes.OnServerInvoke("HoldItem", InventoryService.HoldItem)
+	Remotes.OnServerInvoke("SellHeldItem", InventoryService.SellHeldItem)
 	Remotes.OnServerInvoke("SellItem", function(player: Player, itemId: string, count: number): SellResult
 		return InventoryService.SellItem(player, itemId, count, false)
 	end)

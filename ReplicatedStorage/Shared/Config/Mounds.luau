@@ -125,9 +125,12 @@ local Shared = {
 }
 
 local Mounds = {
-	MaxActivePerPlayer = 6,
+	MaxActivePerServer = 24,
 	SpawnIntervalSeconds = 8,
-	SpawnRadiusStuds = 80,
+	SpawnSearchAttempts = 160,
+	SpawnEdgeMarginStuds = 4,
+	ObstacleClearanceStuds = 2,
+	MoundGapStuds = 2,
 	DespawnIdleSeconds = 180,
 	DigRangeStuds = 8,
 	LatencyToleranceSeconds = 0.12,

@@ -1,15 +1,13 @@
-# Stone Shovel replacement
+# Native Stone Shovel
 
-Source: user-supplied Stone_Shovel.fbx and PBR atlas. Source hand hold: Z=0.76m; bounds center: Z=0.5835m. Imported pivot rotation reset. Shared carry defaults normalize gameplay height to 5.4 studs.
+`ReplicatedStorage/Shared/StoneShovelModel.luau` builds the `HandhewnStoneV2` visual from the same D-grip, wooden shaft, and pointed-spade silhouette as the native Rusty Shovel. The blade is thicker, uses a rough gray stone PBR material, and has three small haft bindings. Rust strips and socket rivets are excluded. Stone has 15 native parts and no imported mesh dependency.
 
-Roblox uploads:
-- Mesh: 125264999160707
-- Diffuse: 115549124119397
-- Roughness: 91745339205419
-- Metallic: 109451120725857
-- Icon: 109747416026820
+`StoneShovelAsset.luau` contains the icon (`rbxassetid://100739219715761`) and the reproducible `DigPalsStoneShovelRockV1` material maps: color, normal, roughness, and metalness. `StoneShovelModel.GetPartSpecs` ensures the MaterialVariant under MaterialService. It tiles every 1.6 studs. The selected material comes from the first generated DigPalsStoneShovel variant; the alternative samples remain in Studio's AssistantMaterials library.
 
-Studio template: ReplicatedStorage.ShovelAssets.StoneShovelMesh, with SurfaceAppearance. Shared/StoneShovelAsset.luau defines geometry and icon used by the builder, shop, Tool and inventory. Rendered icon: Assets/Icons/icon_stone_shovel.png, generated with render_icon.py from the supplied Blender model.
+`ShovelModelBuilder` registers both Rusty and Stone in the native-model table, builds gameplay Tools and previews from the same specs, and invalidates old visual versions. Its shared carry normalization supplies the 5.4-stud default height and the approved DiagonalCarryV4 pose for held, back, and swing recovery. No per-shovel grip offsets or gameplay-stat changes are introduced.
 
-Prior Studio sources and templates: ServerStorage.BeforeStoneShovelImport.
-Validated: mesh/diffuse preload, preview geometry, Tool icon, equip/stow cycles, swing recovery, respawn and shared carry defaults. No gameplay stat changes. Not published to live.
+The previous imported mesh, sources, Tool, and preview are preserved under `ServerStorage.BeforeNativeStoneShovel`. Older FBX/PBR files in this directory and `ServerStorage.BeforeStoneShovelImport` are historical source assets, no longer the active Stone visual.
+
+`native_geometry.json` exports the Roblox part specs. `render_native_icon.py` renders the transparent `Assets/Icons/icon_stone_shovel.png` with a procedural rough-rock shader approximating the in-game surface. Run it with Blender in background mode after geometry changes.
+
+Validated in Studio: material recreation from the saved PBR definition, 5.4-stud Tool height, held and back visuals, Rusty/Stone switching, shared strike recovery, arm restoration on unequip, respawn without duplicate visuals, and the matching hotbar icon. No gameplay stats were changed. The place has not been published live.

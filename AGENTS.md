@@ -3,6 +3,7 @@
 For every new or replacement shovel, use the shared carry pipeline:
 
 - Keep `ReplicatedStorage/Shared/Config/ShovelCarry.luau` as the common default for size, held pose, back pose, hand targets, and animation blend.
+- The default front pose is `DiagonalCarryV4`: follow the approved red reference line, from the right shoulder diagonally down across the body. Keep the upper right-hand contact at local Y=1.6 and the lower left-hand contact at Y=-0.55, with the shovel 0.85 studs in front of the torso. Use `ShovelCarry.GetHeldCFrame(torso)` to align the upper contact to the avatar's shoulder. New shovel models inherit this pose; do not introduce model-specific carry offsets or overwrite the shared idle/swing grips.
 - Build gameplay Tools through `ShovelModelBuilder.BuildGameplayTool` / `CloneGameplayTool`. All Tools receive a 5.4-stud default height and the same carry convention automatically. Do not add per-shovel grip constants.
 - Model convention: local +Y points towards the top grip; local -Y points towards the blade. Reset imported pivot rotation. Put the Tool Handle at the intended hand hold, with no rotation. Preserve mesh UVs and PBR materials.
 - `ShovelCarryService` attaches the selected active Tool diagonally in front, and displays the selected shovel diagonally across the back when unequipped. Back models are cosmetics only, without Tool instances, scripts, collision, touch, query, or mass.

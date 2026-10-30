@@ -127,7 +127,7 @@ local function buildGui()
 	backdrop.Name = "ModalBackdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.fromRGB(6, 8, 14)
-	backdrop.BackgroundTransparency = 0.4
+	backdrop.BackgroundTransparency = 1
 	backdrop.BorderSizePixel = 0
 	backdrop.AutoButtonColor = false
 	backdrop.Text = ""

@@ -86,7 +86,7 @@ local function showAlertPopup(titleText: string, messageText: string, highlightC
 	modal.Name = "IndexAlertModal"
 	modal.Size = UDim2.fromScale(1, 1)
 	modal.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	modal.BackgroundTransparency = 0.4
+	modal.BackgroundTransparency = 1
 	modal.BorderSizePixel = 0
 	modal.ZIndex = 60
 	modal.Parent = screenGui
@@ -373,7 +373,7 @@ local function buildUI()
 	modal.Name = "IndexModal"
 	modal.Size = UDim2.fromScale(1, 1)
 	modal.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	modal.BackgroundTransparency = 0.5
+	modal.BackgroundTransparency = 1
 	modal.BorderSizePixel = 0
 	modal.Visible = false
 	modal.Parent = gui

@@ -1,0 +1,63 @@
+{
+  "asset": "DigPals Miner Mole",
+  "blender_version": "5.2.3 LTS",
+  "roundtrip": {
+    "DigPals_MinerMole_Rig.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 10010,
+      "polygons": 10476,
+      "materials": 9,
+      "animation_ranges": [],
+      "passed": true
+    },
+    "Animations/Mole_Idle.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 10010,
+      "polygons": 10476,
+      "materials": 9,
+      "animation_ranges": [
+        [
+          2.0,
+          50.0
+        ]
+      ],
+      "passed": true
+    },
+    "Animations/Mole_Walk.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 10010,
+      "polygons": 10476,
+      "materials": 9,
+      "animation_ranges": [
+        [
+          2.0,
+          26.0
+        ]
+      ],
+      "passed": true
+    },
+    "Animations/Mole_Digging.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 10010,
+      "polygons": 10476,
+      "materials": 9,
+      "animation_ranges": [
+        [
+          2.0,
+          38.0
+        ]
+      ],
+      "passed": true
+    }
+  },
+  "all_passed": true,
+  "published_to_roblox": false
+}

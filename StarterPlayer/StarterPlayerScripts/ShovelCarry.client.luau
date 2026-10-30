@@ -4,6 +4,8 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Carry = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("ShovelCarry"))
+local SprintAnimation = require(script.Parent.Controllers.SprintAnimation)
+RunService.PreAnimation:Connect(SprintAnimation.Restore)
 local ikStates: {[Model]: {tool: Tool, controls: {IKControl}, targets: {Attachment}}} = {}
 local tracked: {[Model]: {weight: number, joints: {[Motor6D]: CFrame}}} = {}
 local function bind(character: Model)
@@ -45,6 +47,7 @@ RunService.PreSimulation:Connect(function(dt)
    if child:IsA("Tool") and child:GetAttribute("DigPalsShovelTool") then held = child break end
   end
   local humanoid = character:FindFirstChildOfClass("Humanoid")
+  SprintAnimation.Step(character, humanoid, held ~= nil, dt)
   local handle = held and held:FindFirstChild("Handle")
   local active = handle and handle:IsA("BasePart") and humanoid and humanoid.Health > 0
   state.weight += ((if active then 1 else 0) - state.weight) * (1 - math.exp(-Carry.BlendSpeed * dt))

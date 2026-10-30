@@ -33,13 +33,14 @@ local isDone = false
 local started = false
 local hasEquippedPet = false
 local refreshElapsed = 0
+local completionRequested = false
 
 local steps = {
 	{ Title = "Gali Small Mound", Text = "Pegang sekop, lalu klik gundukan." },
 	{ Title = "Jual hasil galian", Text = "Jual item ke Item Merchant." },
-	{ Title = "Tetaskan Starter Egg", Text = "Ke Base, buka telur, lalu tetaskan." },
+	{ Title = "Tetaskan Starter Egg", Text = "Pilih telur di Items > Eggs, lalu taruh di Base." },
 	{ Title = "Gali bersama pet", Text = "Equip pet di PETS, lalu gali." },
-	{ Title = "Kunjungi Shovel Shop", Text = "Lihat sekop baru dan cek QUEST." },
+	{ Title = "Kunjungi Shovel Shop", Text = "Datangi Shovel Shop untuk menyelesaikan tutorial." },
 }
 
 local function round(parent: Instance, radius: number)
@@ -142,9 +143,9 @@ local function refreshUI()
 	if title then title.Text = info.Title end
 	if instruction then instruction.Text = info.Text end
 	if action then
-		action.Visible = currentStep >= 3
-		action.Text = if currentStep == 3 then (if LocalPlayer:GetAttribute("CurrentZone") == "Base" then "BUKA TELUR" else "KE BASE")
-			elseif currentStep == 4 then "BUKA PETS" else "SELESAI"
+		action.Visible = currentStep == 4
+		action.Text = if currentStep == 3 then (if LocalPlayer:GetAttribute("CurrentZone") == "Base" then "EGGS" else "KE BASE")
+			else "BUKA PETS"
 	end
 end
 
@@ -154,7 +155,8 @@ local function refreshTarget(root: BasePart)
 	local label = ""
 	local hint = steps[currentStep].Text
 	if currentStep == 1 or currentStep == 4 then
-		local id, model, moundPosition = MoundVisuals.GetTutorialMound(root.Position, targetMoundId)
+		-- Re-evaluate every refresh so the guide always points to the closest live Small Mound.
+		local id, model, moundPosition = MoundVisuals.GetTutorialMound(root.Position, nil)
 		targetMoundId = id
 		position, adornee, label = moundPosition, model, "SMALL MOUND"
 		if not position then hint = "Menunggu Small Mound..."
@@ -175,9 +177,16 @@ local function refreshTarget(root: BasePart)
 			position = if sign and sign:IsA("BasePart") then sign.Position + Vector3.new(0, 0, -5) else ground.Position
 		end
 		label = "BASE KAMU"
-		hint = if LocalPlayer:GetAttribute("CurrentZone") == "Base" then "Buka telur, lalu tetaskan Starter Egg." else "Tekan KE BASE untuk teleport."
+		hint = if LocalPlayer:GetAttribute("CurrentZone") == "Base" then "Pilih telur di Items > Eggs, lalu klik area Base." else "Pilih telur di Items > Eggs, lalu menuju Base."
 	end
 	targetPosition = position
+	if currentStep == 5 and position and not completionRequested then
+		local delta = Vector2.new(root.Position.X - position.X, root.Position.Z - position.Z)
+		if delta.Magnitude <= 18 then
+			completionRequested = true
+			Remotes.GetEvent("AdvanceTutorial"):FireServer(5)
+		end
+	end
 	if instruction then instruction.Text = hint end
 	if targetHighlight then
 		targetHighlight.Adornee = adornee
@@ -283,15 +292,12 @@ local function buildUI()
 	action.Activated:Connect(function()
 		if currentStep == 3 then
 			if LocalPlayer:GetAttribute("CurrentZone") == "Base" then
-				require(script.Parent:WaitForChild("BaseController")).OpenIncubatorModal(1)
+				require(script.Parent:WaitForChild("InventoryController")).OpenInventory("Eggs")
 			else
 				require(script.Parent:WaitForChild("TeleportController")).TeleportToBase()
 			end
 		elseif currentStep == 4 then
 			require(script.Parent:WaitForChild("PetBagController")).Open()
-		elseif currentStep == 5 then
-			-- Completion is confirmed through the authoritative server state.
-			Remotes.GetEvent("AdvanceTutorial"):FireServer(5)
 		end
 	end)
 end
@@ -299,7 +305,11 @@ end
 local function applyTutorial(step: any, done: any)
 	if type(step) == "number" and step == step then
 		local nextStep = math.clamp(math.floor(step), 1, 5)
-		if nextStep ~= currentStep then targetMoundId = nil; targetPosition = nil end
+		if nextStep ~= currentStep then
+			targetMoundId = nil
+			targetPosition = nil
+			completionRequested = false
+		end
 		currentStep = nextStep
 	end
 	if type(done) == "boolean" then isDone = done end
@@ -326,6 +336,10 @@ function TutorialController.Start()
 	LocalPlayer:GetAttributeChangedSignal("TutorialDone"):Connect(syncAttributes)
 	LocalPlayer:GetAttributeChangedSignal("CurrentZone"):Connect(refreshUI)
 	LocalPlayer.CharacterRemoving:Connect(clearGuidance)
+	LocalPlayer:GetAttributeChangedSignal("DigMinigameActive"):Connect(function()
+		if LocalPlayer:GetAttribute("DigMinigameActive") == true then clearGuidance()
+		else refreshElapsed = 1 end
+	end)
 	Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(snapshot: any)
 		if type(snapshot) ~= "table" then return end
 		if type(snapshot.EquippedPets) == "table" then hasEquippedPet = #snapshot.EquippedPets > 0 end
@@ -333,7 +347,7 @@ function TutorialController.Start()
 	end)
 	syncAttributes()
 	RunService.RenderStepped:Connect(function(dt)
-		if isDone then return end
+		if isDone or LocalPlayer:GetAttribute("DigMinigameActive") == true then return end
 		local character = LocalPlayer.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root and root:IsA("BasePart") then

@@ -101,6 +101,7 @@ export type EggBagEntry = {
 }
 
 export type IncubatorEntry = {
+	Placement: {X: number, Z: number}?,
 	Id: string,
 	Rarity: RarityName,
 	ReadyAt: number,

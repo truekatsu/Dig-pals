@@ -417,7 +417,7 @@ local function buildUI()
 	modal.Name = "QuestStreakModal"
 	modal.Size = UDim2.fromScale(1, 1)
 	modal.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	modal.BackgroundTransparency = 0.5
+	modal.BackgroundTransparency = 1
 	modal.BorderSizePixel = 0
 	modal.Visible = false
 	modal.Parent = gui

@@ -23,12 +23,14 @@ local MerchantController = require(script.Parent:WaitForChild("MerchantControlle
 local ShovelShopController = require(script.Parent:WaitForChild("ShovelShopController"))
 local FxController = require(script.Parent:WaitForChild("FxController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
+local DigFocusController = require(script.Parent:WaitForChild("DigFocusController"))
 
 local LocalPlayer = Players.LocalPlayer
 
 local DigController = {}
 
 local STRIKE_ACTION_NAME = "DigPalsMinigameStrikeAction"
+local CANCEL_ACTION_NAME = "DigPalsMinigameCancelAction"
 
 local activeMoundId: string? = nil
 local activeMoundSize: string = "Small"
@@ -144,13 +146,14 @@ local function applyMoundTimingConfig(sizeName: string)
 	updateZoneLayout()
 end
 
-local function showHintToast(message: string)
+local function showHintToast(message: string, color: Color3?)
 	if not hintToastLabel then
 		return
 	end
 	hintToastLabel.Text = message
+	hintToastLabel.TextColor3 = color or Color3.fromRGB(255, 225, 130)
 	hintToastLabel.TextTransparency = 0
-	hintToastLabel.BackgroundTransparency = 0.25
+	hintToastLabel.BackgroundTransparency = 1
 
 	task.delay(1.8, function()
 		if hintToastLabel and hintToastLabel.Text == message then
@@ -179,6 +182,7 @@ local function clearBagFullLockedState()
 end
 
 local function showBagFullLockedState(moundId: string, moundSize: string)
+	DigFocusController.Exit()
 	MoundVisuals.SetDiggingMound(nil)
 	activeMoundId = nil
 	bagFullLockedMoundId = moundId
@@ -225,6 +229,19 @@ end
 local function bindMinigameControls()
 	setCharacterJumpEnabled(false)
 	ContextActionService:BindActionAtPriority(
+		CANCEL_ACTION_NAME,
+		function(_, state)
+			if not activeMoundId then return Enum.ContextActionResult.Pass end
+			if state == Enum.UserInputState.Begin then DigController.StopMinigame(true) end
+			return Enum.ContextActionResult.Sink
+		end,
+		false,
+		Enum.ContextActionPriority.High.Value + 501,
+		Enum.KeyCode.X,
+		Enum.KeyCode.ButtonB,
+		Enum.KeyCode.Escape
+	)
+	ContextActionService:BindActionAtPriority(
 		STRIKE_ACTION_NAME,
 		handleMinigameAction,
 		false,
@@ -237,10 +254,13 @@ end
 
 local function unbindMinigameControls()
 	ContextActionService:UnbindAction(STRIKE_ACTION_NAME)
+	ContextActionService:UnbindAction(CANCEL_ACTION_NAME)
 	setCharacterJumpEnabled(true)
 end
 
 function DigController.StopMinigame(notifyServer: boolean)
+	DigFocusController.Exit()
+	unbindMinigameControls()
 	sessionReady, awaitingStrike = false, false
 	MoundVisuals.SetDiggingMound(nil)
 	bagFullLockedMoundId = nil
@@ -252,7 +272,6 @@ function DigController.StopMinigame(notifyServer: boolean)
 	end
 	activeMoundId = nil
 	MoundVisuals.SetSelectedMound(nil)
-	unbindMinigameControls()
 
 	if hudContainer then
 		hudContainer.Visible = false
@@ -302,7 +321,7 @@ function DigController.StartMinigameOnMound(moundId: string, moundSize: string, 
 		else MoundsConfig.DigRangeStuds
 
 	if not isCharacterWithinRangeOf(moundPos, allowedRange) then
-		showHintToast("Dekati gundukan dulu lalu klik!")
+		showHintToast("Gundukan terlalu jauh!!", Color3.fromRGB(113, 205, 255))
 		return
 	end
 
@@ -346,6 +365,7 @@ function DigController.StartMinigameOnMound(moundId: string, moundSize: string, 
 		hudContainer.Visible = true
 	end
 
+	if screenGui then DigFocusController.Enter(screenGui) end
 	Remotes.GetEvent("StartDig"):FireServer(moundId)
 end
 
@@ -413,6 +433,9 @@ local function createDigUI()
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = playerGui
 	screenGui = gui
+	gui.AncestryChanged:Connect(function()
+		if gui.Parent == nil and activeMoundId then DigController.StopMinigame(true) end
+	end)
 
 	local toast = Instance.new("TextLabel")
 	toast.Name = "HintToast"
@@ -585,6 +608,19 @@ local function createDigUI()
 	button.Activated:Connect(function()
 		if button.Active then DigController.AttemptStrike() end
 	end)
+	local exitButton = Instance.new("TextButton")
+	exitButton.Name = "ExitDigButton"
+	exitButton.AnchorPoint = Vector2.new(1, 1)
+	exitButton.Position = UDim2.new(1, 0, 0, -4)
+	exitButton.Size = UDim2.fromOffset(120, 44)
+	exitButton.BackgroundTransparency = 1
+	exitButton.Font = Enum.Font.GothamBold
+	exitButton.Text = "KELUAR [X]"
+	exitButton.TextSize = 13
+	exitButton.TextColor3 = Color3.fromRGB(235, 235, 230)
+	exitButton.TextStrokeTransparency = 0
+	exitButton.Parent = container
+	exitButton.Activated:Connect(function() DigController.StopMinigame(true) end)
 	updateZoneLayout()
 	updateResolve()
 end
@@ -601,6 +637,9 @@ function DigController.Start()
 	end)
 
 	LocalPlayer.CharacterAdded:Connect(function()
+		DigController.StopMinigame(true)
+	end)
+	LocalPlayer.CharacterRemoving:Connect(function()
 		DigController.StopMinigame(true)
 	end)
 
@@ -720,6 +759,12 @@ function DigController.Start()
 		end
 
 		if not activeMoundId then
+			return
+		end
+		local character = LocalPlayer.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not humanoid or humanoid.Health <= 0 then
+			DigController.StopMinigame(true)
 			return
 		end
 

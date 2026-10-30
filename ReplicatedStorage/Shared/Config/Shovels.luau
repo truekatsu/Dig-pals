@@ -7,6 +7,8 @@ local StoneAsset = require(script.Parent.Parent:WaitForChild("StoneShovelAsset")
 
 local IronAsset = require(script.Parent.Parent:WaitForChild("IronShovelAsset"))
 
+local GoldenAsset = require(script.Parent.Parent:WaitForChild("GoldenShovelAsset"))
+
 local Types = require(script.Parent.Parent.Util.Types)
 
 local ShopOrder: { string } = {
@@ -89,7 +91,7 @@ local All: { [string]: Types.ShovelConfig } = {
 		Luck = 1.85,
 		IsShopShovel = true,
 		ToolName = "GoldenShovel",
-		Icon = "rbxassetid://6034509993",
+		Icon = GoldenAsset.Icon,
 	},
 	DiamondShovel = {
 		Id = "DiamondShovel",

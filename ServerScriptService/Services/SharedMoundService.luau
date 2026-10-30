@@ -432,6 +432,10 @@ function SharedMoundService.StartSession(
 	return true, nil, session
 end
 
+function SharedMoundService.HasSession(userId: number): boolean
+	return activeSharedMound ~= nil and activeSharedMound.Sessions[userId] ~= nil
+end
+
 function SharedMoundService.CancelSession(userId: number)
 	if activeSharedMound then
 		activeSharedMound.Sessions[userId] = nil

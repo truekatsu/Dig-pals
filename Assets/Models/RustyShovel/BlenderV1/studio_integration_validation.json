@@ -1,0 +1,41 @@
+{
+  "studio": "PROJECT ASLI BKP",
+  "place_id": 92384255410439,
+  "version": "Oxide07BlenderV2",
+  "mesh_id": 84345880591592,
+  "uploaded_model_id": 112557336512404,
+  "texture_pack_id": 92971506321951,
+  "active_material": "Albedo fallback; all original PBR maps preserved in PBRSource",
+  "pbr_texture_pack_load": "Failure in current Studio session",
+  "r15_ik_weights": [
+    1,
+    1
+  ],
+  "gameplay_tests": [
+    {
+      "test": "final_equip_albedo_and_preserved_PBR",
+      "passed": true
+    },
+    {
+      "test": "swing_recovery",
+      "passed": true
+    },
+    {
+      "test": "unequip_safe_back",
+      "passed": true
+    },
+    {
+      "test": "reequip_no_duplicate",
+      "passed": true
+    },
+    {
+      "test": "switch_Stone_Rusty",
+      "passed": true
+    },
+    {
+      "test": "respawn",
+      "passed": true
+    }
+  ],
+  "live_place_published": false
+}

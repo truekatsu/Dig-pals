@@ -1,5 +1,7 @@
 --!strict
 local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
+local NpcDialogue = require(script.Parent:WaitForChild("NpcDialogue"))
+local Notifications = require(script.Parent:WaitForChild("NotificationController"))
 -- Client UI controller for Hub & Base Item Merchant: per-item sell, sell all, and BagLevel upgrades (Step 6)
 
 local Players = game:GetService("Players")
@@ -430,10 +432,36 @@ local function applySnapshotPayload(payload: any)
 end
 
 function MerchantController.IsOpen(): boolean
-	return isOpen
+	return isOpen or NpcDialogue.IsOpen("MerchantDialogue")
+end
+
+function MerchantController.OpenDialogue(target: BasePart)
+	if LocalPlayer:GetAttribute("DigMinigameActive") then return end
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") or (root.Position - target.Position).Magnitude > 16 then return end
+	MerchantController.ClosePanel()
+	InventoryController.ClosePanel()
+	local function sell(remoteName: string)
+		if isBusy then return end
+		isBusy = true
+		local ok, result = pcall(function() return Remotes.GetFunction(remoteName):InvokeServer() end)
+		isBusy = false
+		if ok and type(result) == "table" and result.Success then
+			Notifications.ShowAlert(string.format("Sold %d item(s) (+$%s)!", result.SoldCount or 0, Format.Commas(result.CoinsEarned or 0)))
+		else
+			Notifications.ShowAlert(if ok and type(result) == "table" then result.Message or "Unable to sell items." else "Unable to reach The Merchant.", "Error")
+		end
+	end
+	NpcDialogue.Open(target, {
+		{Text = "Sell all item in inventory", Selected = function() sell("SellAllItems") end},
+		{Text = "Sell held item", Selected = function() sell("SellHeldItem") end},
+		{Text = "Nevermind", Selected = function() end},
+	}, "MerchantDialogue")
 end
 
 function MerchantController.OpenPanel(anchorPart: BasePart?, customTitle: string?)
+	NpcDialogue.Close()
 	if InventoryController.IsOpen() then
 		InventoryController.ClosePanel()
 	end
@@ -455,6 +483,7 @@ function MerchantController.OpenPanel(anchorPart: BasePart?, customTitle: string
 end
 
 function MerchantController.ClosePanel()
+	NpcDialogue.Close("MerchantDialogue")
 	if not isOpen then
 		return
 	end
@@ -605,7 +634,7 @@ local function buildMerchantGui()
 	backdrop.Name = "ModalBackdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
-	backdrop.BackgroundTransparency = 0.45
+	backdrop.BackgroundTransparency = 1
 	backdrop.BorderSizePixel = 0
 	backdrop.AutoButtonColor = false
 	backdrop.Text = ""
@@ -1078,6 +1107,20 @@ function MerchantController.Start()
 		applySnapshotPayload(payload)
 	end)
 
+	ProximityPromptService.PromptShown:Connect(function(prompt)
+		if findMerchantAnchorFromPrompt(prompt) then NpcDialogue.ShowPrompt(prompt) end
+	end)
+	ProximityPromptService.PromptHidden:Connect(NpcDialogue.HidePrompt)
+	local function bindMerchantClick(item: Instance)
+		if item:IsA("ClickDetector") and item.Name == "MerchantTalkClick" then
+			item.MouseClick:Connect(function(who: Player)
+				local target = item.Parent
+				if who == LocalPlayer and target and target:IsA("BasePart") then MerchantController.OpenDialogue(target) end
+			end)
+		end
+	end
+	workspace.DescendantAdded:Connect(bindMerchantClick)
+	for _, item in workspace:GetDescendants() do bindMerchantClick(item) end
 	ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, playerWhoTriggered: Player)
 		if playerWhoTriggered ~= LocalPlayer then
 			return
@@ -1086,7 +1129,7 @@ function MerchantController.Start()
 		if anchor then
 			local loc = tostring(anchor:GetAttribute("MerchantLocation") or "Hub")
 			local title = if string.find(loc, "^Base") then "BASE MERCHANT" else "ITEM MERCHANT"
-			MerchantController.OpenPanel(anchor, title)
+			MerchantController.OpenDialogue(anchor)
 		end
 	end)
 
@@ -1094,7 +1137,7 @@ function MerchantController.Start()
 		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
 		end
-		if input.KeyCode == Enum.KeyCode.Escape and isOpen then
+if input.KeyCode == Enum.KeyCode.Escape and MerchantController.IsOpen() then
 			MerchantController.ClosePanel()
 		end
 	end)

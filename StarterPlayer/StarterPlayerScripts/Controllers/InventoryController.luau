@@ -17,6 +17,7 @@ local InventoryController = {}
 local RustyAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("RustyShovelAsset"))
 local StoneAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("StoneShovelAsset"))
 local IronAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("IronShovelAsset"))
+local GoldenAsset = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GoldenShovelAsset"))
 local MenuIcons = require(script.Parent:WaitForChild("MenuIcons"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Util"):WaitForChild("Remotes"))
 
@@ -55,7 +56,7 @@ local ASSETS: AssetConfigType = {
 		RustyShovel = RustyAsset.Icon,
 		StoneShovel = StoneAsset.Icon,
 		IronShovel = IronAsset.Icon,
-		GoldenShovel = "rbxassetid://100895397684604",
+		GoldenShovel = GoldenAsset.Icon,
 		MossyShovel = "rbxassetid://103006088766240",
 		MoonlitShovel = "rbxassetid://133100007987104",
 		ShovelSilhouette = "rbxassetid://84922947564946",
@@ -100,7 +101,7 @@ local SHOVEL_CONFIGS: {
 	},
 	GoldenShovel = {
 		DisplayName = "Golden Shovel",
-		Icon = "rbxassetid://100895397684604",
+		Icon = GoldenAsset.Icon,
 		TextColor = Color3.fromRGB(255, 220, 65),
 	},
 	DiamondShovel = {
@@ -562,7 +563,11 @@ function InventoryController.SelectHotbarSlot(slotNumber: number)
 		return
 	end
 
-	if slotNumber > 3 then return end
+	if slotNumber > 3 then
+		InventoryController.CloseInventory()
+		require(script.Parent.CarryHotbarController).Select(slotNumber)
+		return
+	end
 	if slotNumber == 1 then
 		local active = not isShovelHeld()
 		if isInventoryOpen then
@@ -939,7 +944,7 @@ local function buildDigPalsUI()
 	backdrop.Name = "ModalBackdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-	backdrop.BackgroundTransparency = 0.5
+	backdrop.BackgroundTransparency = 1
 	backdrop.BorderSizePixel = 0
 	backdrop.AutoButtonColor = false
 	backdrop.Text = ""

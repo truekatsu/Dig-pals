@@ -56,21 +56,20 @@ local ok, err = pcall(function()
 		if i < 3 then
 			check("Miss" .. i .. "PreservesProgress", mound.HP == hp)
 		else
-			check("FailureResetsProgress", outcome.Failed == true and mound.HP == mound.MaxHP
-				and mound.MissCount == 0 and mound.PerfectCount == 0 and mound.GoodCount == 0)
+			check("FailureIsPlayerLocal", outcome.Failed == true and mound.HP == hp and Dig.GetSession(uid) == nil)
 		end
 	end
-	check("QueuedStrikesBlocked", Dig.ExecuteStrike(uid, nil, mound.Id, session.LastStrikeTime + 4, mound.Position, 0).Reason == "DigFailed")
-	check("PetsCannotBypassFailure", not Dig.ApplyPetDamage(nil, uid, mound.Id, 10, "QA_Pet"))
+	local hpBeforePet = mound.HP
+	check("PetsContinueAfterPlayerFailure", Dig.ApplyPetDamage(nil, uid, mound.Id, 10, "QA_Pet") and mound.HP < hpBeforePet)
 	local _, _, retry = Dig.StartSession(uid, nil, mound.Id, session.LastStrikeTime + 4, mound.Position)
 	assert(retry)
 	session = retry
 	check("RetryFromZero", session.Attempt.Misses == 0 and not session.Attempt.Failed
-		and not mound.DigFailed and mound.HP == mound.MaxHP)
+		and mound.HP < mound.MaxHP)
 	Dig.ExecuteStrike(uid, nil, mound.Id, nextTime(0), mound.Position, 0)
 	Dig.CancelSession(uid)
 	local _, _, resumed = Dig.StartSession(uid, nil, mound.Id, session.LastStrikeTime + 4, mound.Position)
-	check("CancelPreservesMisses", resumed ~= nil and resumed.Attempt.Misses == 1)
+	check("CancelClearsPrivateMisses", resumed ~= nil and resumed.Attempt.Misses == 0)
 end)
 Dig.CancelSession(uid)
 Mounds.ClearUserMounds(uid)

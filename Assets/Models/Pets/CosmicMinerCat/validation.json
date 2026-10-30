@@ -1,0 +1,21 @@
+{
+  "asset": "DigPals Cosmic Miner Cat",
+  "blender_version": "5.2.3 LTS",
+  "mesh_count": 1,
+  "armature_count": 1,
+  "bone_count": 10,
+  "vertex_count": 7206,
+  "polygon_count": 7624,
+  "dimensions_meters_xyz": [0.5583, 1.2317, 0.8962],
+  "dimensions_roblox_studs_xyz": [1.99, 4.4, 3.2],
+  "fbx_axis_forward": "-Z",
+  "fbx_axis_up": "Y",
+  "leaf_bones": false,
+  "roundtrip_import": {
+    "DigPals_CosmicMinerCat_Rig.fbx": {"mesh": 1, "armature": 1, "bones": 10, "status": "passed"},
+    "Animations/Cat_Idle.fbx": {"mesh": 1, "armature": 1, "bones": 10, "frames": 49, "fps": 24, "status": "passed"},
+    "Animations/Cat_Walk.fbx": {"mesh": 1, "armature": 1, "bones": 10, "frames": 25, "fps": 24, "status": "passed"},
+    "Animations/Cat_Digging.fbx": {"mesh": 1, "armature": 1, "bones": 10, "frames": 37, "fps": 24, "status": "passed"}
+  },
+  "published_to_roblox": false
+}

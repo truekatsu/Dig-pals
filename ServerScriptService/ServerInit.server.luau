@@ -50,12 +50,15 @@ PassiveIncomeService.Start()
 SharedMoundService.Start()
 MoundService.Start()
 DigService.Start()
+require(ServicesFolder:WaitForChild("SprintService")).Start()
 DropService.Start()
 IndexService.Start()
 QuestService.Start()
 LeaderboardService.Start()
 TutorialService.Start()
 DebugService.Start()
+require(ServicesFolder:WaitForChild("CarryHotbarService")).Start()
+require(ServicesFolder:WaitForChild("EggPlacementService")).Start()
 
 -- Step 1 automated verification
 local function runStep1Verification()
@@ -209,69 +212,54 @@ local function runStep3Verification()
 
 	local userA = -900011
 	local userB = -900012
-	MoundService.ClearUserMounds(userA)
-	MoundService.ClearUserMounds(userB)
+	MoundService.ClearAllMounds("TestReset")
 
 	local t0 = 2000000
-	local originA = Vector3.new(-20, 5, -20)
-	local originB = Vector3.new(20, 5, 20)
-
-	for _ = 1, 10 do
-		MoundService.SpawnMoundForUser(userA, nil, originA, t0)
+	for i = 1, MoundsConfig.MaxActivePerServer + 4 do
+		local caller = if i % 2 == 0 then userA else userB
+		MoundService.SpawnMoundForUser(caller, nil, Vector3.zero, t0)
 	end
-	local countA = MoundService.GetActiveCount(userA)
+	local serverCount = MoundService.GetActiveCount()
 	verify(
-		countA == MoundsConfig.MaxActivePerPlayer,
-		string.format("User A active mounds capped at %d", MoundsConfig.MaxActivePerPlayer),
-		string.format("actual=%d", countA)
+		serverCount == MoundsConfig.MaxActivePerServer,
+		string.format("Server-wide active mounds capped at %d", MoundsConfig.MaxActivePerServer),
+		string.format("actual=%d", serverCount)
 	)
 
-	for _ = 1, 3 do
-		MoundService.SpawnMoundForUser(userB, nil, originB, t0)
-	end
-	local countB = MoundService.GetActiveCount(userB)
-	verify(countB == 3, "User B has 3 independent personal mounds", string.format("actual=%d", countB))
-
-	local overlapFound = false
 	local moundsA = MoundService.GetPlayerMounds(userA)
 	local moundsB = MoundService.GetPlayerMounds(userB)
-	for moundId in moundsA do
-		if moundsB[moundId] ~= nil then
-			overlapFound = true
-		end
-	end
-	verify(not overlapFound, "2-player isolation: User A and User B mounds do not overlap")
+	verify(moundsA == moundsB, "All players resolve the same server-wide mound collection")
 
-	local spawnZone = workspace:FindFirstChild("Plain") and workspace.Plain:FindFirstChild("SpawnZone")
-	local allInsideSpawnZone = true
-	if spawnZone and spawnZone:IsA("BasePart") then
-		local halfX = spawnZone.Size.X * 0.5
-		local halfZ = spawnZone.Size.Z * 0.5
+	local terrainMesh = workspace:FindFirstChild("Plain") and workspace.Plain:FindFirstChild("TerrainMesh")
+	local valleyFloor = terrainMesh and terrainMesh:FindFirstChild("ValleyFloor")
+	local allInsideValleyFloor = true
+	if valleyFloor and valleyFloor:IsA("BasePart") then
+		local halfX = valleyFloor.Size.X * 0.5
+		local halfZ = valleyFloor.Size.Z * 0.5
 		for _, m in moundsA do
-			if math.abs(m.Position.X - spawnZone.Position.X) > halfX or math.abs(m.Position.Z - spawnZone.Position.Z) > halfZ then
-				allInsideSpawnZone = false
+			if math.abs(m.Position.X - valleyFloor.Position.X) > halfX or math.abs(m.Position.Z - valleyFloor.Position.Z) > halfZ then
+				allInsideValleyFloor = false
 			end
 		end
 	else
-		allInsideSpawnZone = false
+		allInsideValleyFloor = false
 	end
-	verify(allInsideSpawnZone, "All spawned personal mounds landed inside Workspace.Plain.SpawnZone via raycast")
+	verify(allInsideValleyFloor, "All server-wide mounds landed on Workspace.Plain.TerrainMesh.ValleyFloor")
 
 	local despawnedBefore = MoundService.CheckIdleDespawns(t0 + MoundsConfig.DespawnIdleSeconds - 1)
 	verify(despawnedBefore == 0, "Mounds do not despawn before 3 minutes idle (179s)")
 
 	local despawnedAt3Min = MoundService.CheckIdleDespawns(t0 + MoundsConfig.DespawnIdleSeconds)
 	verify(
-		despawnedAt3Min == 9 and MoundService.GetActiveCount(userA) == 0 and MoundService.GetActiveCount(userB) == 0,
-		"All 9 idle mounds despawned after 3 minutes (180s)",
+		despawnedAt3Min == MoundsConfig.MaxActivePerServer and MoundService.GetActiveCount() == 0,
+		string.format("All %d idle server mounds despawned after 3 minutes (180s)", MoundsConfig.MaxActivePerServer),
 		string.format("despawned=%d", despawnedAt3Min)
 	)
 
-	local replacement = MoundService.SpawnMoundForUser(userA, nil, originA, t0 + MoundsConfig.DespawnIdleSeconds + 1)
-	verify(replacement ~= nil and MoundService.GetActiveCount(userA) == 1, "Despawned idle mound can immediately be replaced")
+	local replacement = MoundService.SpawnMoundForUser(userA, nil, Vector3.zero, t0 + MoundsConfig.DespawnIdleSeconds + 1)
+	verify(replacement ~= nil and MoundService.GetActiveCount() == 1, "Despawned idle server mound can immediately be replaced")
 
-	MoundService.ClearUserMounds(userA)
-	MoundService.ClearUserMounds(userB)
+	MoundService.ClearAllMounds("TestCleanup")
 	print(string.format("[Step3Validator] SUMMARY: %d passed, %d failed.", passed, failed))
 end
 
@@ -2172,7 +2160,7 @@ local function runStep14Verification()
 	verify(adv4 == true and tutProfile.Tutorial.Step == 5, "Step 4 (Equip Pet & Dig) advances to Step 5")
 
 	local adv5 = TutorialService.AdvanceStepForProfile(tutProfile, 5)
-	verify(adv5 == true and tutProfile.Tutorial.Done == true, "Step 5 (Explore Shop & Quest) marks tutorial Done == true")
+	verify(adv5 == true and tutProfile.Tutorial.Done == true, "Step 5 (Visit Shovel Shop) marks tutorial Done == true")
 
 	local postDoneAttempt = TutorialService.AdvanceStepForProfile(tutProfile, 5)
 	verify(postDoneAttempt == false and tutProfile.Tutorial.Done == true, "Advancing after completion is rejected safely")
@@ -2295,17 +2283,17 @@ local function runStep16Verification()
 	local victimMound = MoundService.SpawnMoundForUser(victimUser, nil, victimOrigin, 100.0)
 	assert(victimMound, "victimMound must exist")
 
-	-- Attacker attempts to strike victim's personal mound
+	-- Any player may strike the same normal server mound.
 	local stealStrikeResult = DigService.ExecuteStrike(attackerUser, nil, victimMound.Id, 100.0, victimMound.Position, 0.5)
-	verify(stealStrikeResult.Success == false and stealStrikeResult.Reason == "MoundNotFound", "Striking another player's personal mound rejected with MoundNotFound")
-	verify(victimMound.HP == victimMound.MaxHP, "Victim mound HP untouched after grief attempt")
+	verify(stealStrikeResult.Success == true, "A second player can dig the same server-wide mound")
+	DigService.CancelSession(attackerUser)
 
-	-- Attacker attempts rapid spam on own mound
+	-- Attacker attempts rapid spam on another server mound.
 	local attackerMound = MoundService.SpawnMoundForUser(attackerUser, nil, victimOrigin, 100.0)
 	assert(attackerMound, "attackerMound must exist")
 
 	local strike1 = DigService.ExecuteStrike(attackerUser, nil, attackerMound.Id, 100.0, attackerMound.Position, 0.5)
-	verify(strike1.Success == true, "First strike on owned mound succeeds")
+	verify(strike1.Success == true, "First strike on server mound succeeds")
 
 	local strike2Spam = DigService.ExecuteStrike(attackerUser, nil, attackerMound.Id, 100.05, attackerMound.Position, 0.5) -- 50ms later (cooldown is 1.0s)
 	verify(strike2Spam.Success == false and strike2Spam.Reason == "Cooldown", "Spam strike faster than DigSpeed cooldown rejected with Cooldown")

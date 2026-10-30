@@ -106,7 +106,7 @@ local function showRewardPopup(summary: any)
 	modal.Name = "RewardModal"
 	modal.Size = UDim2.fromScale(1, 1)
 	modal.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	modal.BackgroundTransparency = 0.45
+	modal.BackgroundTransparency = 1
 	modal.BorderSizePixel = 0
 	modal.ZIndex = 50
 	modal.Parent = screenGui

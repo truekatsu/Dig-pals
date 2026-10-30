@@ -12,6 +12,7 @@ local Types = require(Shared:WaitForChild("Util"):WaitForChild("Types"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local PetsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Pets"))
 local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rarity"))
+local PetModelBuilder = require(Shared:WaitForChild("PetModelBuilder"))
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -24,6 +25,7 @@ type VisualPetState = {
 	Level: number,
 	Speed: number,
 	MoveSpeed: number,
+	GroundOffset: number,
 	Model: Model,
 	RootPart: BasePart,
 	CurrentPos: Vector3,
@@ -31,6 +33,8 @@ type VisualPetState = {
 	IsAttacking: boolean,
 	AttackTargetPos: Vector3?,
 	AttackStartedAt: number,
+	AnimTracks: { [string]: AnimationTrack }?,
+	CurrentAnim: string?,
 }
 
 type BasePetVisualState = {
@@ -46,6 +50,8 @@ type BasePetVisualState = {
 	TargetPos: Vector3,
 	NextMoveTime: number,
 	GroundPart: BasePart?,
+	AnimTracks: { [string]: AnimationTrack }?,
+	CurrentAnim: string?,
 }
 
 local SPECIES_EMOJIS: { [string]: string } = {
@@ -240,6 +246,86 @@ local function createProceduralPetModel(
 	return model, root
 end
 
+local function setupPetAnimations(model: Model): { [string]: AnimationTrack }?
+	local animController = model:FindFirstChildOfClass("AnimationController")
+	local animator = animController and animController:FindFirstChildOfClass("Animator")
+	local animsFolder = model:FindFirstChild("Animations")
+	if not (animator and animsFolder) then
+		return nil
+	end
+
+	local tracks: { [string]: AnimationTrack } = {}
+	for _, anim in ipairs(animsFolder:GetChildren()) do
+		if anim:IsA("Animation") and #anim.AnimationId > 0 then
+			local ok, track = pcall(function()
+				return animator:LoadAnimation(anim)
+			end)
+			if ok and track then
+				if anim.Name == "Idle" or anim.Name == "Walk" then
+					track.Looped = true
+				elseif anim.Name == "Digging" then
+					track.Looped = false
+				end
+				tracks[anim.Name] = track
+			end
+		end
+	end
+
+	if tracks.Idle then
+		tracks.Idle:Play(0.2)
+	end
+
+	return tracks
+end
+
+local function setPetAnimation(visual: { AnimTracks: { [string]: AnimationTrack }?, CurrentAnim: string? }, targetAnim: string)
+	if not visual.AnimTracks then
+		return
+	end
+	if visual.CurrentAnim == targetAnim then
+		return
+	end
+
+	local prev = if visual.CurrentAnim then visual.AnimTracks[visual.CurrentAnim] else nil
+	local nextTrack = visual.AnimTracks[targetAnim]
+
+	if prev and prev ~= nextTrack then
+		prev:Stop(0.2)
+	end
+	if nextTrack and not nextTrack.IsPlaying then
+		nextTrack:Play(0.2)
+	end
+	visual.CurrentAnim = targetAnim
+end
+
+-- Root-to-foot distance is model-specific (imported pets can have a pivot at their feet).
+local function getGroundOffset(model: Model, root: BasePart): number
+	local bottom=math.huge
+	for _,part in model:GetDescendants() do
+		if part:IsA("BasePart") and part.Transparency<1 then
+			for _,x in {-1,1} do for _,y in {-1,1} do for _,z in {-1,1} do
+				local corner=part.CFrame:PointToWorldSpace(part.Size*Vector3.new(x,y,z)*.5)
+				bottom=math.min(bottom,corner.Y)
+			end end end
+		end
+	end
+	return if bottom==math.huge then root.Size.Y*.5 else root.Position.Y-bottom
+end
+
+local function groundPosition(position: Vector3, offset: number): Vector3
+	local ignore: {Instance}={}
+	for _,player in Players:GetPlayers() do if player.Character then table.insert(ignore,player.Character) end end
+	for _,name in {"ClientPetVisuals","ClientBasePetVisuals","ClientMounds","ActiveMounds"} do
+		local folder=workspace:FindFirstChild(name) if folder then table.insert(ignore,folder) end
+	end
+	local params=RaycastParams.new()
+	params.FilterType=Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances=ignore
+	params.RespectCanCollide=true
+	local hit=workspace:Raycast(position+Vector3.new(0,12,0),Vector3.new(0,-120,0),params)
+	return if hit then Vector3.new(position.X,hit.Position.Y+offset+.03,position.Z) else position
+end
+
 -- Synchronize active visual models with equipped pets list
 local function syncVisualPets()
 	local activeGuids: { [string]: boolean } = {}
@@ -256,13 +342,22 @@ local function syncVisualPets()
 			local speed = if speciesCfg then speciesCfg.Speed else 2
 			local moveSpeed = PetsConfig.BaseMoveSpeedStuds + (PetsConfig.MoveSpeedPerStat * speed)
 
-			local model, root = createProceduralPetModel(
+			local model, root = PetModelBuilder.BuildPet(
 				guid,
 				petData.Species,
 				petData.Variant,
 				petData.Level,
 				playerPos + Vector3.new(math.random(-3, 3), 1, math.random(-3, 3))
 			)
+
+			if petVisualFolder then
+				model.Parent = petVisualFolder
+			end
+
+			local animTracks = setupPetAnimations(model)
+			local groundOffset=getGroundOffset(model,root)
+			local grounded=groundPosition(root.Position,groundOffset)
+			root.CFrame=CFrame.new(grounded)*root.CFrame.Rotation
 
 			activeVisuals[guid] = {
 				Guid = guid,
@@ -271,6 +366,7 @@ local function syncVisualPets()
 				Level = petData.Level,
 				Speed = speed,
 				MoveSpeed = moveSpeed,
+				GroundOffset = groundOffset,
 				Model = model,
 				RootPart = root,
 				CurrentPos = root.Position,
@@ -278,6 +374,8 @@ local function syncVisualPets()
 				IsAttacking = false,
 				AttackTargetPos = nil,
 				AttackStartedAt = 0,
+				AnimTracks = animTracks,
+				CurrentAnim = if animTracks and animTracks.Idle then "Idle" else nil,
 			}
 		end
 	end
@@ -285,6 +383,11 @@ local function syncVisualPets()
 	-- Remove unequipped
 	for guid, visual in pairs(activeVisuals) do
 		if not activeGuids[guid] then
+			if visual.AnimTracks then
+				for _, track in pairs(visual.AnimTracks) do
+					track:Stop(0)
+				end
+			end
 			if visual.Model then
 				visual.Model:Destroy()
 			end
@@ -348,7 +451,7 @@ local function syncBasePets()
 				spawnPos = Vector3.new(ground.Position.X + gx, ground.Position.Y + (ground.Size.Y / 2) + 1.2, ground.Position.Z + gz)
 			end
 
-			local model, root = createProceduralPetModel(
+			local model, root = PetModelBuilder.BuildPet(
 				"Base_" .. guid,
 				petData.Species,
 				petData.Variant,
@@ -359,6 +462,8 @@ local function syncBasePets()
 			if basePetVisualFolder then
 				model.Parent = basePetVisualFolder
 			end
+
+			local animTracks = setupPetAnimations(model)
 
 			activeBaseVisuals[guid] = {
 				Guid = guid,
@@ -373,6 +478,8 @@ local function syncBasePets()
 				TargetPos = root.Position,
 				NextMoveTime = os.clock() + math.random(2, 5),
 				GroundPart = ground,
+				AnimTracks = animTracks,
+				CurrentAnim = if animTracks and animTracks.Idle then "Idle" else nil,
 			}
 		end
 	end
@@ -380,6 +487,11 @@ local function syncBasePets()
 	-- Remove unassigned base pets
 	for guid, visual in pairs(activeBaseVisuals) do
 		if not activeGuids[guid] then
+			if visual.AnimTracks then
+				for _, track in pairs(visual.AnimTracks) do
+					track:Stop(0)
+				end
+			end
 			if visual.Model then
 				visual.Model:Destroy()
 			end
@@ -485,7 +597,7 @@ function PetVisualController.Start()
 			return
 		end
 
-		local activeMoundsFolder = workspace:FindFirstChild("ActiveMounds")
+		local activeMoundsFolder = workspace:FindFirstChild("ClientMounds") or workspace:FindFirstChild("ActiveMounds")
 		local moundModel = activeMoundsFolder and activeMoundsFolder:FindFirstChild(moundId)
 		local moundPos = if moundModel and moundModel:IsA("Model") and moundModel.PrimaryPart
 			then moundModel.PrimaryPart.Position
@@ -493,7 +605,10 @@ function PetVisualController.Start()
 
 		if moundPos then
 			visual.IsAttacking = true
-			visual.AttackTargetPos = moundPos + Vector3.new(0, 0.8, 0)
+			local away=Vector3.new(visual.CurrentPos.X-moundPos.X,0,visual.CurrentPos.Z-moundPos.Z)
+			if away.Magnitude<.01 then away=Vector3.new(1,0,0) end
+			local moundRadius=if moundModel and moundModel:IsA("Model") and moundModel.PrimaryPart then math.max(moundModel.PrimaryPart.Size.X,moundModel.PrimaryPart.Size.Z)*.5 else 2
+			visual.AttackTargetPos = moundPos+away.Unit*(moundRadius+1.1)
 			visual.AttackStartedAt = os.clock()
 			spawnHitEffect(moundPos, damage)
 
@@ -529,6 +644,15 @@ function PetVisualController.Start()
 			if visual and visual.RootPart and visual.RootPart.Parent then
 				local targetPos: Vector3
 				local targetLook: Vector3
+				local species=PetsConfig.Species[visual.Species]
+				local leash=if species then species.Range else 14
+				-- Return immediately when the player moves or teleports beyond this pet's Range.
+				local fromPlayer=visual.CurrentPos-rootPart.Position
+				if fromPlayer.Magnitude>leash then
+					visual.CurrentPos=rootPart.Position+fromPlayer.Unit*leash
+					visual.IsAttacking=false
+					visual.AttackTargetPos=nil
+				end
 
 				if visual.IsAttacking and visual.AttackTargetPos then
 					-- Dash towards mound attack target
@@ -537,22 +661,40 @@ function PetVisualController.Start()
 				else
 					-- Formation following avatar
 					local offset = offsets[idx] or Vector3.new(2.5, 0.8, 2.0)
-					local hoverY = math.sin((now * 3.2) + (idx * 1.5)) * 0.35
-					local formationPos = (charCFrame * CFrame.new(offset)).Position + Vector3.new(0, hoverY, 0)
+					local formationPos = (charCFrame * CFrame.new(offset.X,0,offset.Z)).Position
 					targetPos = formationPos
 					targetLook = charCFrame.LookVector
 				end
 
 				-- Speed: 6 + 2 x Speed studs/sec
+				local targetOffset=targetPos-rootPart.Position
+				if targetOffset.Magnitude>leash then targetPos=rootPart.Position+targetOffset.Unit*leash end
+				targetPos=groundPosition(targetPos,visual.GroundOffset)
 				local maxMove = visual.MoveSpeed * dt
 				local diff = targetPos - visual.CurrentPos
 				local dist = diff.Magnitude
 
 				local nextPos = if dist <= maxMove then targetPos else visual.CurrentPos + (diff.Unit * maxMove)
+				local leashOffset=nextPos-rootPart.Position
+				if leashOffset.Magnitude>leash then nextPos=rootPart.Position+leashOffset.Unit*leash end
+				nextPos=groundPosition(nextPos,visual.GroundOffset)
 				visual.CurrentPos = nextPos
 
+				-- Animation state
+				if visual.AnimTracks then
+					if visual.IsAttacking then
+						setPetAnimation(visual, "Digging")
+					elseif dist > 0.15 then
+						setPetAnimation(visual, "Walk")
+					else
+						setPetAnimation(visual, "Idle")
+					end
+				end
+
 				-- Smooth orientation
-				local lookDir = if dist > 0.05 then (targetPos - visual.CurrentPos).Unit else targetLook
+				local lookDelta=Vector3.new(targetPos.X-visual.CurrentPos.X,0,targetPos.Z-visual.CurrentPos.Z)
+				targetLook=Vector3.new(targetLook.X,0,targetLook.Z)
+				local lookDir = if lookDelta.Magnitude > 0.05 then lookDelta.Unit else targetLook
 				if lookDir.Magnitude > 0.01 then
 					local cf = CFrame.lookAt(nextPos, nextPos + lookDir)
 					visual.RootPart.CFrame = cf
@@ -589,6 +731,14 @@ function PetVisualController.Start()
 				local hoverBob = math.sin((now * 3.0) + (string.byte(visual.Guid, #visual.Guid) or 1)) * 0.15
 				local finalPos = nextPos + Vector3.new(0, hoverBob, 0)
 				visual.CurrentPos = nextPos
+
+				if visual.AnimTracks then
+					if dist > 0.2 then
+						setPetAnimation(visual, "Walk")
+					else
+						setPetAnimation(visual, "Idle")
+					end
+				end
 
 				if dist > 0.1 then
 					local lookDir = moveDiff.Unit

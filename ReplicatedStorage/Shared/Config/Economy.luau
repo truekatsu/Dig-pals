@@ -61,6 +61,10 @@ local Economy = {
 	OwnerUserIds = {
 		[8535886514] = true,
 	},
+	-- Account-specific inventory entitlement; ordinary starting inventories stay unchanged.
+	AllShovelsUserIds = {
+		[8535886514] = true, -- truekatsu13
+	},
 }
 
 return table.freeze(Economy)

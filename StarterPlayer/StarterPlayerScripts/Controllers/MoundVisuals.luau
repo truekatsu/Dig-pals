@@ -1,5 +1,5 @@
 --!strict
--- Client-side visual controller for personal mounds, click selection, and HP billboards (Step 3 & Step 4)
+-- Client-side visual controller for server-wide mounds, click selection, and HP billboards.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -48,6 +48,7 @@ type MoundVisualEntry = {
 local MoundVisuals = {}
 
 local activeVisuals: { [string]: MoundVisualEntry } = {}
+local despawnedMoundIds: { [string]: boolean } = {}
 local clickCallbacks: { MoundClickedCallback } = {}
 local selectedMoundId: string? = nil
 local diggingMoundId: string? = nil
@@ -455,7 +456,7 @@ function MoundVisuals.Start()
 	getContainerFolder()
 
 	Remotes.GetEvent("MoundSpawned").OnClientEvent:Connect(function(payload: any)
-		if type(payload) == "table" and type(payload.Id) == "string" then
+		if type(payload) == "table" and type(payload.Id) == "string" and not despawnedMoundIds[payload.Id] then
 			MoundVisuals.SpawnMound(payload :: MoundVisualPayload)
 		end
 	end)
@@ -468,6 +469,7 @@ function MoundVisuals.Start()
 
 	Remotes.GetEvent("MoundDespawned").OnClientEvent:Connect(function(moundId: string, _reason: string)
 		if type(moundId) == "string" then
+			despawnedMoundIds[moundId] = true
 			MoundVisuals.RemoveMound(moundId)
 		end
 	end)

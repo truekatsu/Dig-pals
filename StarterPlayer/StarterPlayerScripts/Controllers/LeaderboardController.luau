@@ -260,7 +260,7 @@ local function buildUI()
 	backdrop.Name = "ModalBackdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	backdrop.BackgroundTransparency = 0.55
+	backdrop.BackgroundTransparency = 1
 	backdrop.Visible = false
 	backdrop.Parent = gui
 	modalFrame = backdrop

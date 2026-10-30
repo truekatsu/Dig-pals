@@ -101,6 +101,7 @@ function UI.Mount(controller, gui, shovels)
 		round(b,12) stroke(b)
 		local n=label(b,tostring(i),UDim2.fromOffset(6,3),UDim2.fromOffset(16,20),13,Cream) n.ZIndex=15
 	end
+	require(script.Parent.CarryHotbarController).Mount(bar)
 	local function render()
 		local cat=controller.GetActiveCategory()
 		local shovelMode=cat=="Shovel"
@@ -120,7 +121,7 @@ function UI.Mount(controller, gui, shovels)
 		if cat=="Items" then
 			for id,quantity in pairs(snapshot.Items or {}) do if quantity>0 then table.insert(entries,{id=id,quantity=quantity}) end end
 		elseif cat=="Eggs" then
-			for _,egg in ipairs(snapshot.EggBag or {}) do table.insert(entries,{id=type(egg)=="table" and egg.Id or egg,rarity=type(egg)=="table" and egg.Rarity or nil}) end
+			for index,egg in ipairs(snapshot.EggBag or {}) do table.insert(entries,{id=type(egg)=="table" and egg.Id or egg,rarity=type(egg)=="table" and egg.Rarity or nil,index=index}) end
 		elseif cat=="Shovel" then
 			for _,id in ipairs(snapshot.OwnedShovels or {}) do table.insert(entries,{id=id}) end
 		elseif cat=="Pet" then
@@ -161,13 +162,22 @@ function UI.Mount(controller, gui, shovels)
 			name.TextWrapped=true name.ZIndex=44
 			label(card,active and "EQUIPPED" or entry.quantity and "x"..entry.quantity or cat=="Pet" and "LV. "..tostring(entry.pet.Level or 1) or string.upper(rarity),UDim2.fromOffset(6,132),UDim2.new(1,-12,0,26),13,active and Green or Ink).ZIndex=44
 			card.Activated:Connect(function()
-				if busy or (cat~="Shovel" and cat~="Pet") then return end
+if busy then return end
+				if cat~="Shovel" then
+					busy=true
+					local result=require(script.Parent.CarryHotbarController).Assign(cat,entry.id,entry.guid or entry.index or entry.id)
+					busy=false
+					if result.Success then controller.CloseInventory() end
+					return
+				end
 				busy=true errorText=nil
-				local remote=cat=="Shovel" and "EquipShovel" or active and "UnequipPet" or "EquipPet"
+local remote=cat=="Items" and "HoldItem" or cat=="Shovel" and "EquipShovel" or active and "UnequipPet" or "EquipPet"
 				local ok,result=pcall(function() return Remotes.GetFunction(remote):InvokeServer(entry.guid or entry.id) end)
 				if not ok or not result or not result.Success then errorText=type(result)=="table" and result.Message or "Unable to equip. Please try again." end
 				if ok and result and result.Success and cat=="Shovel" then snapshot.EquippedShovel=entry.id controller.SyncEquippedShovel(entry.id) end
-				busy=false render()
+				busy=false
+				if ok and result and result.Success and cat=="Items" then controller.CloseInventory() end
+				render()
 			end)
 		end
 	end

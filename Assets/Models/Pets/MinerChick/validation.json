@@ -1,0 +1,63 @@
+{
+  "asset": "DigPals Miner Chick",
+  "blender_version": "5.2.3 LTS",
+  "roundtrip": {
+    "DigPals_MinerChick_Rig.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 7274,
+      "polygons": 7800,
+      "materials": 8,
+      "animation_ranges": [],
+      "passed": true
+    },
+    "Animations/Chick_Idle.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 7274,
+      "polygons": 7800,
+      "materials": 8,
+      "animation_ranges": [
+        [
+          2.0,
+          50.0
+        ]
+      ],
+      "passed": true
+    },
+    "Animations/Chick_Walk.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 7274,
+      "polygons": 7800,
+      "materials": 8,
+      "animation_ranges": [
+        [
+          2.0,
+          26.0
+        ]
+      ],
+      "passed": true
+    },
+    "Animations/Chick_Digging.fbx": {
+      "meshes": 1,
+      "armatures": 1,
+      "bones": 11,
+      "vertices": 7274,
+      "polygons": 7800,
+      "materials": 8,
+      "animation_ranges": [
+        [
+          2.0,
+          38.0
+        ]
+      ],
+      "passed": true
+    }
+  },
+  "all_passed": true,
+  "published_to_roblox": false
+}

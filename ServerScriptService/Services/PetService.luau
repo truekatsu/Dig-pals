@@ -356,13 +356,13 @@ type MoundTarget = {
 	Position: Vector3,
 }
 
--- Find closest active mound (personal or shared) within range of player position
+-- Find closest active server mound (normal or rare) within range of player position.
 local function findClosestMoundInRange(
-	userId: number,
+	_userId: number,
 	avatarPos: Vector3,
 	range: number
 ): (MoundTarget?, number)
-	local mounds = MoundService.GetPlayerMounds(userId)
+	local mounds = MoundService.GetActiveMounds()
 	local closest: MoundTarget? = nil
 	local closestDist = range + 0.001
 
@@ -378,7 +378,7 @@ local function findClosestMoundInRange(
 
 	local sharedMound = SharedMoundService.GetActiveMound()
 	if sharedMound and sharedMound.IsActive and sharedMound.HP > 0 then
-		local effectiveRange = range + (sharedMound.Scale.X * 0.5)
+		local effectiveRange = range
 		local dist = (sharedMound.Position - avatarPos).Magnitude
 		if dist <= effectiveRange and dist < closestDist then
 			closest = { Id = sharedMound.Id, Size = "Shared", Position = sharedMound.Position }

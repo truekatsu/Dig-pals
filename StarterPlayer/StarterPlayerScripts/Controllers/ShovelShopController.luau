@@ -1,5 +1,6 @@
 --!strict
 local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
+local NpcDialogue = require(script.Parent:WaitForChild("NpcDialogue"))
 -- Client UI controller for Hub Shovel Shop: 5 shop shovels with 3D previews, stats comparison, non-sequential purchase [U], and equip (Step 7)
 
 local Players = game:GetService("Players")
@@ -24,39 +25,39 @@ local LocalPlayer = Players.LocalPlayer
 local ShovelShopController = {}
 
 local COLORS = {
-	PanelBg = Color3.fromRGB(22, 27, 38),
-	PanelBorder = Color3.fromRGB(96, 178, 232),
-	HeaderBg = Color3.fromRGB(26, 34, 48),
-	ListBg = Color3.fromRGB(18, 22, 32),
-	RowBg = Color3.fromRGB(29, 36, 50),
-	RowHover = Color3.fromRGB(38, 48, 66),
-	RowSelectedBg = Color3.fromRGB(40, 56, 82),
-	RowSelectedBorder = Color3.fromRGB(96, 212, 255),
+	PanelBg = Color3.fromRGB(255, 245, 215),
+	PanelBorder = Color3.fromRGB(26, 44, 49),
+	HeaderBg = Color3.fromRGB(255, 245, 215),
+	ListBg = Color3.fromRGB(240, 225, 188),
+	RowBg = Color3.fromRGB(255, 249, 227),
+	RowHover = Color3.fromRGB(255, 239, 185),
+	RowSelectedBg = Color3.fromRGB(214, 237, 209),
+	RowSelectedBorder = Color3.fromRGB(29, 120, 100),
 
-	DetailBg = Color3.fromRGB(28, 36, 52),
-	ViewportBg = Color3.fromRGB(18, 24, 36),
-	StatTrackBg = Color3.fromRGB(15, 19, 28),
+	DetailBg = Color3.fromRGB(240, 225, 188),
+	ViewportBg = Color3.fromRGB(222, 225, 196),
+	StatTrackBg = Color3.fromRGB(212, 199, 164),
 
 	StatPower = Color3.fromRGB(245, 148, 62),
 	StatSpeed = Color3.fromRGB(72, 196, 248),
 	StatLuck = Color3.fromRGB(82, 216, 132),
 
-	BtnBuy = Color3.fromRGB(38, 168, 224),
-	BtnEquip = Color3.fromRGB(46, 178, 106),
-	BtnDisabled = Color3.fromRGB(48, 56, 72),
+	BtnBuy = Color3.fromRGB(255, 196, 65),
+	BtnEquip = Color3.fromRGB(52, 166, 139),
+	BtnDisabled = Color3.fromRGB(210, 204, 178),
 
-	BadgeEquippedBg = Color3.fromRGB(38, 142, 86),
-	BadgeOwnedBg = Color3.fromRGB(48, 68, 96),
-	BadgePriceAffordableBg = Color3.fromRGB(58, 48, 22),
-	BadgePriceLockedBg = Color3.fromRGB(52, 38, 44),
+	BadgeEquippedBg = Color3.fromRGB(180, 221, 186),
+	BadgeOwnedBg = Color3.fromRGB(229, 221, 190),
+	BadgePriceAffordableBg = Color3.fromRGB(255, 223, 128),
+	BadgePriceLockedBg = Color3.fromRGB(232, 193, 177),
 
-	TextPrimary = Color3.fromRGB(244, 248, 255),
-	TextSecondary = Color3.fromRGB(178, 190, 212),
-	TextMuted = Color3.fromRGB(122, 134, 156),
-	TextCyan = Color3.fromRGB(108, 220, 255),
-	TextGold = Color3.fromRGB(255, 220, 96),
-	TextSuccess = Color3.fromRGB(112, 238, 154),
-	TextError = Color3.fromRGB(252, 112, 112),
+	TextPrimary = Color3.fromRGB(26, 44, 49),
+	TextSecondary = Color3.fromRGB(72, 85, 78),
+	TextMuted = Color3.fromRGB(101, 113, 100),
+	TextCyan = Color3.fromRGB(29, 120, 100),
+	TextGold = Color3.fromRGB(132, 88, 20),
+	TextSuccess = Color3.fromRGB(29, 120, 83),
+	TextError = Color3.fromRGB(170, 57, 48),
 }
 
 local MAX_OPEN_DISTANCE = 27
@@ -208,9 +209,12 @@ local function refreshHeaderAndRowBadges()
 			local equipped = (equippedShovelId == shovelId)
 
 			refs.Button.BackgroundColor3 = if selected then COLORS.RowSelectedBg else COLORS.RowBg
-			refs.Stroke.Color = if selected then COLORS.RowSelectedBorder else getRarityColor(cfg.Rarity)
-			refs.Stroke.Thickness = if selected then 2.0 else 1.1
-			refs.Stroke.Transparency = if selected then 0 else 0.45
+			refs.Stroke.Color = if selected then COLORS.RowSelectedBorder else COLORS.PanelBorder
+			refs.Stroke.Thickness = if selected then 3 else 2
+			refs.Stroke.Transparency = 0
+			refs.Badge.Font = Enum.Font.FredokaOne
+			local oldOutline = refs.Badge:FindFirstChild("CurrencyOutline")
+			if oldOutline then oldOutline:Destroy() end
 
 			if equipped then
 				refs.Badge.Text = "DIPAKAI"
@@ -223,11 +227,11 @@ local function refreshHeaderAndRowBadges()
 			else
 				local canAfford = coinsBalance >= cfg.Price
 				refs.Badge.Text = Format.Money(cfg.Price)
-				CurrencyStyle.Apply(refs.Badge)
+				refs.Badge.Font = Enum.Font.FredokaOne
 				refs.Badge.BackgroundColor3 = if canAfford
 					then COLORS.BadgePriceAffordableBg
 					else COLORS.BadgePriceLockedBg
-				refs.Badge.TextColor3 = if canAfford then CurrencyStyle.Green else COLORS.TextError
+				refs.Badge.TextColor3 = if canAfford then COLORS.TextSuccess else COLORS.TextError
 			end
 		end
 	end
@@ -248,7 +252,7 @@ local function refreshDetailPane()
 
 	if detailNameLabel then
 		detailNameLabel.Text = cfg.DisplayName
-		detailNameLabel.TextColor3 = rarityColor
+		detailNameLabel.TextColor3 = COLORS.TextPrimary
 	end
 
 	if detailRarityBadge then
@@ -377,7 +381,7 @@ local function applySnapshotPayload(payload: any)
 end
 
 function ShovelShopController.IsOpen(): boolean
-	return isOpen
+return isOpen or NpcDialogue.IsOpen("ShovelkeeperDialogue")
 end
 
 function ShovelShopController.SelectShovel(shovelId: string)
@@ -389,7 +393,26 @@ function ShovelShopController.SelectShovel(shovelId: string)
 	refreshAllShopVisuals()
 end
 
+function ShovelShopController.OpenDialogue(anchorPart: BasePart)
+	if LocalPlayer:GetAttribute("DigMinigameActive") == true then return end
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") or (root.Position - anchorPart.Position).Magnitude > 16 then return end
+	ShovelShopController.ClosePanel()
+	InventoryController.ClosePanel()
+	MerchantController.ClosePanel()
+	NpcDialogue.Open(anchorPart, {
+		{Text = "Aku ingin membeli sekop.", Selected = function() ShovelShopController.OpenPanel(anchorPart) end},
+		{Text = "Aku ingin mengganti sekop.", Selected = function()
+			ShovelShopController.OpenPanel(anchorPart)
+			ShovelShopController.SelectShovel(equippedShovelId)
+		end},
+		{Text = "Tidak jadi.", Selected = function() end},
+	})
+end
+
 function ShovelShopController.OpenPanel(anchorPart: BasePart?)
+	NpcDialogue.Close()
 	if InventoryController.IsOpen() then
 		InventoryController.ClosePanel()
 	end
@@ -432,6 +455,7 @@ function ShovelShopController.OpenPanel(anchorPart: BasePart?)
 end
 
 function ShovelShopController.ClosePanel()
+	NpcDialogue.Close("ShovelkeeperDialogue")
 	if not isOpen then
 		return
 	end
@@ -530,7 +554,7 @@ local function createStatBarRow(
 	nameLbl.Position = UDim2.fromOffset(0, 0)
 	nameLbl.Size = UDim2.new(0.48, 0, 0, 16)
 	nameLbl.BackgroundTransparency = 1
-	nameLbl.Font = Enum.Font.GothamBold
+	nameLbl.Font = Enum.Font.FredokaOne
 	nameLbl.TextSize = 12
 	nameLbl.TextXAlignment = Enum.TextXAlignment.Left
 	nameLbl.TextColor3 = COLORS.TextSecondary
@@ -543,7 +567,7 @@ local function createStatBarRow(
 	valLbl.Position = UDim2.fromScale(1, 0)
 	valLbl.Size = UDim2.new(0.52, 0, 0, 16)
 	valLbl.BackgroundTransparency = 1
-	valLbl.Font = Enum.Font.GothamBlack
+	valLbl.Font = Enum.Font.FredokaOne
 	valLbl.TextSize = 12
 	valLbl.TextXAlignment = Enum.TextXAlignment.Right
 	valLbl.TextColor3 = COLORS.TextPrimary
@@ -606,8 +630,8 @@ local function buildShopRows()
 			rowCorner.Parent = row
 
 			local rowStroke = Instance.new("UIStroke")
-			rowStroke.Color = rarityColor
-			rowStroke.Thickness = 1.1
+			rowStroke.Color = COLORS.PanelBorder
+			rowStroke.Thickness = 2
 			rowStroke.Transparency = 0.45
 			rowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 			rowStroke.Parent = row
@@ -617,7 +641,7 @@ local function buildShopRows()
 			thumbVp.AnchorPoint = Vector2.new(0, 0.5)
 			thumbVp.Position = UDim2.new(0, 8, 0.5, 0)
 			thumbVp.Size = UDim2.fromOffset(52, 52)
-			thumbVp.BackgroundColor3 = COLORS.ViewportBg
+			thumbVp.BackgroundColor3 = rarityColor:Lerp(COLORS.PanelBg, 0.75)
 			thumbVp.BorderSizePixel = 0
 			thumbVp.Ambient = Color3.fromRGB(185, 195, 215)
 			thumbVp.LightColor = Color3.fromRGB(255, 252, 240)
@@ -641,11 +665,11 @@ local function buildShopRows()
 			nameLbl.Position = UDim2.fromOffset(68, 12)
 			nameLbl.Size = UDim2.new(1, -166, 0, 22)
 			nameLbl.BackgroundTransparency = 1
-			nameLbl.Font = Enum.Font.GothamBold
+			nameLbl.Font = Enum.Font.FredokaOne
 			nameLbl.TextSize = 15
 			nameLbl.TextXAlignment = Enum.TextXAlignment.Left
 			nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
-			nameLbl.TextColor3 = rarityColor
+			nameLbl.TextColor3 = COLORS.TextPrimary
 			nameLbl.Text = cfg.DisplayName
 			nameLbl.Parent = row
 
@@ -654,7 +678,7 @@ local function buildShopRows()
 			statsSub.Position = UDim2.fromOffset(68, 36)
 			statsSub.Size = UDim2.new(1, -166, 0, 18)
 			statsSub.BackgroundTransparency = 1
-			statsSub.Font = Enum.Font.GothamMedium
+			statsSub.Font = Enum.Font.FredokaOne
 			statsSub.TextSize = 11
 			statsSub.TextXAlignment = Enum.TextXAlignment.Left
 			statsSub.TextTruncate = Enum.TextTruncate.AtEnd
@@ -669,7 +693,7 @@ local function buildShopRows()
 			statusBadge.Size = UDim2.fromOffset(82, 26)
 			statusBadge.BackgroundColor3 = COLORS.BadgeOwnedBg
 			statusBadge.BorderSizePixel = 0
-			statusBadge.Font = Enum.Font.GothamBlack
+			statusBadge.Font = Enum.Font.FredokaOne
 			statusBadge.TextSize = 11
 			statusBadge.TextColor3 = COLORS.TextPrimary
 			statusBadge.Text = "DIMILIKI"
@@ -729,7 +753,7 @@ local function buildShovelShopGui()
 	backdrop.Name = "ModalBackdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
-	backdrop.BackgroundTransparency = 0.45
+	backdrop.BackgroundTransparency = 1
 	backdrop.BorderSizePixel = 0
 	backdrop.AutoButtonColor = false
 	backdrop.Text = ""
@@ -745,7 +769,7 @@ local function buildShovelShopGui()
 	local panel = Instance.new("Frame")
 	panel.Name = "ShovelShopPanel"
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.Position = UDim2.new(0.5, 0, 0.44, 0)
+	panel.Position = UDim2.new(0.5, 0, 0.46, 0)
 	panel.Size = UDim2.fromOffset(776, 496)
 	panel.BackgroundColor3 = COLORS.PanelBg
 	panel.BorderSizePixel = 0
@@ -761,7 +785,7 @@ local function buildShovelShopGui()
 
 	local panelStroke = Instance.new("UIStroke")
 	panelStroke.Color = COLORS.PanelBorder
-	panelStroke.Thickness = 1.8
+	panelStroke.Thickness = 3
 	panelStroke.Parent = panel
 
 	-- Header
@@ -779,25 +803,28 @@ local function buildShovelShopGui()
 
 	local titleLbl = Instance.new("TextLabel")
 	titleLbl.Name = "Title"
-	titleLbl.Position = UDim2.fromOffset(18, 0)
-	titleLbl.Size = UDim2.fromOffset(250, 50)
-	titleLbl.BackgroundTransparency = 1
-	titleLbl.Font = Enum.Font.GothamBlack
+	titleLbl.Position = UDim2.fromOffset(16, 8)
+	titleLbl.Size = UDim2.fromOffset(190, 36)
+	titleLbl.BackgroundTransparency = 0
+	titleLbl.BackgroundColor3 = Color3.fromRGB(29, 120, 100)
+	titleLbl.Font = Enum.Font.FredokaOne
 	titleLbl.TextSize = 18
-	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-	titleLbl.TextColor3 = COLORS.TextCyan
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Center
+	titleLbl.TextColor3 = Color3.fromRGB(255, 245, 215)
 	titleLbl.Text = "SHOVEL SHOP"
 	titleLbl.ZIndex = 12
 	titleLbl.Parent = header
+	local tabCorner = Instance.new("UICorner") tabCorner.CornerRadius = UDim.new(0, 10) tabCorner.Parent = titleLbl
+	local tabStroke = Instance.new("UIStroke") tabStroke.Color = COLORS.PanelBorder tabStroke.Thickness = 2 tabStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border tabStroke.Parent = titleLbl
 
 	local ownedPill = Instance.new("TextLabel")
 	ownedPill.Name = "OwnedPill"
 	ownedPill.AnchorPoint = Vector2.new(1, 0.5)
 	ownedPill.Position = UDim2.new(1, -188, 0.5, 0)
 	ownedPill.Size = UDim2.fromOffset(144, 28)
-	ownedPill.BackgroundColor3 = Color3.fromRGB(34, 48, 68)
+	ownedPill.BackgroundColor3 = Color3.fromRGB(229, 221, 190)
 	ownedPill.BorderSizePixel = 0
-	ownedPill.Font = Enum.Font.GothamBold
+	ownedPill.Font = Enum.Font.FredokaOne
 	ownedPill.TextSize = 12
 	ownedPill.TextColor3 = COLORS.TextSecondary
 	ownedPill.Text = "Koleksi Toko: 1 / 5"
@@ -814,9 +841,9 @@ local function buildShovelShopGui()
 	coinsPill.AnchorPoint = Vector2.new(1, 0.5)
 	coinsPill.Position = UDim2.new(1, -58, 0.5, 0)
 	coinsPill.Size = UDim2.fromOffset(122, 28)
-	coinsPill.BackgroundColor3 = Color3.fromRGB(48, 42, 24)
+	coinsPill.BackgroundColor3 = Color3.fromRGB(255, 223, 128)
 	coinsPill.BorderSizePixel = 0
-	coinsPill.Font = Enum.Font.GothamBlack
+	coinsPill.Font = Enum.Font.FredokaOne
 	coinsPill.TextSize = 12
 	coinsPill.TextColor3 = COLORS.TextGold
 	coinsPill.Text = "$100"
@@ -836,7 +863,7 @@ local function buildShovelShopGui()
 	closeBtn.Size = UDim2.fromOffset(44, 44)
 	closeBtn.BackgroundColor3 = Color3.fromRGB(205, 68, 76)
 	closeBtn.BorderSizePixel = 0
-	closeBtn.Font = Enum.Font.GothamBlack
+	closeBtn.Font = Enum.Font.FredokaOne
 	closeBtn.TextSize = 18
 	closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	closeBtn.Text = "X"
@@ -846,6 +873,7 @@ local function buildShovelShopGui()
 	local closeCorner = Instance.new("UICorner")
 	closeCorner.CornerRadius = UDim.new(0, 9)
 	closeCorner.Parent = closeBtn
+	local closeStroke = Instance.new("UIStroke") closeStroke.Color = COLORS.PanelBorder closeStroke.Thickness = 2 closeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border closeStroke.Parent = closeBtn
 
 	closeBtn.Activated:Connect(function()
 		ShovelShopController.ClosePanel()
@@ -864,6 +892,7 @@ local function buildShovelShopGui()
 	local leftCorner = Instance.new("UICorner")
 	leftCorner.CornerRadius = UDim.new(0, 11)
 	leftCorner.Parent = leftContainer
+	local listStroke = Instance.new("UIStroke") listStroke.Color = COLORS.PanelBorder listStroke.Thickness = 2 listStroke.Parent = leftContainer
 
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.Name = "ShovelList"
@@ -871,7 +900,7 @@ local function buildShovelShopGui()
 	scroll.BackgroundTransparency = 1
 	scroll.BorderSizePixel = 0
 	scroll.ScrollBarThickness = 5
-	scroll.ScrollBarImageColor3 = Color3.fromRGB(96, 148, 198)
+	scroll.ScrollBarImageColor3 = Color3.fromRGB(146, 133, 101)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 	scroll.ZIndex = 12
@@ -906,8 +935,8 @@ local function buildShovelShopGui()
 	rightCorner.Parent = rightPane
 
 	local rightStroke = Instance.new("UIStroke")
-	rightStroke.Color = Color3.fromRGB(68, 92, 128)
-	rightStroke.Thickness = 1.2
+	rightStroke.Color = COLORS.PanelBorder
+	rightStroke.Thickness = 2
 	rightStroke.Parent = rightPane
 
 	-- 3D Viewport Preview Box
@@ -934,7 +963,7 @@ local function buildShovelShopGui()
 	vpHint.Position = UDim2.new(1, -8, 1, -4)
 	vpHint.Size = UDim2.fromOffset(120, 16)
 	vpHint.BackgroundTransparency = 1
-	vpHint.Font = Enum.Font.GothamMedium
+	vpHint.Font = Enum.Font.FredokaOne
 	vpHint.TextSize = 10
 	vpHint.TextXAlignment = Enum.TextXAlignment.Right
 	vpHint.TextColor3 = COLORS.TextMuted
@@ -966,7 +995,7 @@ local function buildShovelShopGui()
 	dName.Position = UDim2.fromOffset(14, 152)
 	dName.Size = UDim2.new(1, -112, 0, 24)
 	dName.BackgroundTransparency = 1
-	dName.Font = Enum.Font.GothamBlack
+	dName.Font = Enum.Font.FredokaOne
 	dName.TextSize = 18
 	dName.TextXAlignment = Enum.TextXAlignment.Left
 	dName.TextTruncate = Enum.TextTruncate.AtEnd
@@ -983,7 +1012,7 @@ local function buildShovelShopGui()
 	rBadge.Size = UDim2.fromOffset(86, 20)
 	rBadge.BackgroundColor3 = RarityConfig.ById.Uncommon.Color
 	rBadge.BorderSizePixel = 0
-	rBadge.Font = Enum.Font.GothamBlack
+	rBadge.Font = Enum.Font.FredokaOne
 	rBadge.TextSize = 10
 	rBadge.TextColor3 = Color3.fromRGB(255, 255, 255)
 	rBadge.Text = "UNCOMMON"
@@ -1000,7 +1029,7 @@ local function buildShovelShopGui()
 	priceState.Position = UDim2.fromOffset(14, 176)
 	priceState.Size = UDim2.new(1, -28, 0, 18)
 	priceState.BackgroundTransparency = 1
-	priceState.Font = Enum.Font.GothamBold
+	priceState.Font = Enum.Font.FredokaOne
 	priceState.TextSize = 12
 	priceState.TextXAlignment = Enum.TextXAlignment.Left
 	priceState.TextColor3 = COLORS.TextGold
@@ -1008,14 +1037,14 @@ local function buildShovelShopGui()
 	priceState.ZIndex = 12
 	priceState.Parent = rightPane
 	detailPriceOrStateLabel = priceState
-	CurrencyStyle.Apply(priceState, true)
+	priceState.TextColor3 = COLORS.TextGold
 
 	local desc = Instance.new("TextLabel")
 	desc.Name = "Description"
 	desc.Position = UDim2.fromOffset(14, 196)
 	desc.Size = UDim2.new(1, -28, 0, 34)
 	desc.BackgroundTransparency = 1
-	desc.Font = Enum.Font.GothamMedium
+	desc.Font = Enum.Font.FredokaOne
 	desc.TextSize = 11
 	desc.TextWrapped = true
 	desc.TextXAlignment = Enum.TextXAlignment.Left
@@ -1051,7 +1080,7 @@ local function buildShovelShopGui()
 	sBanner.Position = UDim2.new(0.5, 0, 1, -62)
 	sBanner.Size = UDim2.new(1, -28, 0, 18)
 	sBanner.BackgroundTransparency = 1
-	sBanner.Font = Enum.Font.GothamBold
+	sBanner.Font = Enum.Font.FredokaOne
 	sBanner.TextSize = 11
 	sBanner.TextTruncate = Enum.TextTruncate.AtEnd
 	sBanner.TextColor3 = COLORS.TextSuccess
@@ -1069,7 +1098,7 @@ local function buildShovelShopGui()
 	actBtn.Size = UDim2.new(1, -28, 0, 46)
 	actBtn.BackgroundColor3 = COLORS.BtnBuy
 	actBtn.BorderSizePixel = 0
-	actBtn.Font = Enum.Font.GothamBlack
+	actBtn.Font = Enum.Font.FredokaOne
 	actBtn.TextSize = 14
 	actBtn.TextColor3 = COLORS.TextPrimary
 	actBtn.Text = "BELI & PAKAI"
@@ -1080,6 +1109,7 @@ local function buildShovelShopGui()
 	local actCorner = Instance.new("UICorner")
 	actCorner.CornerRadius = UDim.new(0, 10)
 	actCorner.Parent = actBtn
+	local actionStroke = Instance.new("UIStroke") actionStroke.Color = COLORS.PanelBorder actionStroke.Thickness = 2 actionStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border actionStroke.Parent = actBtn
 
 	actBtn.Activated:Connect(function()
 		if actBtn.Active then
@@ -1154,13 +1184,28 @@ function ShovelShopController.Start()
 		applySnapshotPayload(payload)
 	end)
 
+	ProximityPromptService.PromptShown:Connect(function(prompt)
+		if findShopAnchorFromPrompt(prompt) then NpcDialogue.ShowPrompt(prompt) end
+	end)
+	ProximityPromptService.PromptHidden:Connect(NpcDialogue.HidePrompt)
+	local function bindNpcClick(item: Instance)
+		if item:IsA("ClickDetector") and item.Name == "ShovelkeeperTalkClick" then
+			item.MouseClick:Connect(function(who: Player)
+				local head = item.Parent
+				if who == LocalPlayer and head and head:IsA("BasePart") then ShovelShopController.OpenDialogue(head) end
+			end)
+		end
+	end
+	workspace.DescendantAdded:Connect(bindNpcClick)
+	for _, item in workspace:GetDescendants() do bindNpcClick(item) end
+
 	ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, playerWhoTriggered: Player)
 		if playerWhoTriggered ~= LocalPlayer then
 			return
 		end
 		local anchor = findShopAnchorFromPrompt(prompt)
 		if anchor then
-			ShovelShopController.OpenPanel(anchor)
+			ShovelShopController.OpenDialogue(anchor)
 		end
 	end)
 
@@ -1168,7 +1213,7 @@ function ShovelShopController.Start()
 		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
 		end
-		if input.KeyCode == Enum.KeyCode.Escape and isOpen then
+if input.KeyCode == Enum.KeyCode.Escape and ShovelShopController.IsOpen() then
 			ShovelShopController.ClosePanel()
 		end
 	end)

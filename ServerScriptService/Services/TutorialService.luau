@@ -14,6 +14,7 @@ local EggsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Eggs"))
 local PlayerState = require(script.Parent:WaitForChild("PlayerState"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local ShovelInventoryService = require(script.Parent:WaitForChild("ShovelInventoryService"))
+local MoundService = require(script.Parent:WaitForChild("MoundService"))
 
 export type UnlockGateResult = {
 	Success: boolean,
@@ -27,8 +28,53 @@ local SANDY_GATE_COST = 10000
 local IRON_SHOVEL_INDEX = 3 -- "IronShovel" in ShovelsConfig.AllOrder
 
 local started = false
+local ensureTutorialTable: (Types.PlayerProfile) -> ()
 
-local function ensureTutorialTable(profile: Types.PlayerProfile)
+local function ensureNearbyTutorialMound(player: Player)
+	task.spawn(function()
+		for _ = 1, 12 do
+			if player.Parent ~= Players then return end
+			local mound = MoundService.EnsureTutorialMound(player)
+			if mound then return end
+			task.wait(0.5)
+		end
+	end)
+end
+
+local function isAtShovelShop(player: Player): boolean
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local plain = workspace:FindFirstChild("Plain")
+	local merchant = plain and plain:FindFirstChild("Merchant")
+	local counter = merchant and merchant:FindFirstChild("ShovelShop_Counter")
+	if not root or not root:IsA("BasePart") or not counter or not counter:IsA("BasePart") then
+		return false
+	end
+	local delta = Vector2.new(root.Position.X - counter.Position.X, root.Position.Z - counter.Position.Z)
+	return delta.Magnitude <= 20
+end
+
+local function setupTutorialPlayer(player: Player)
+	task.spawn(function()
+		for _ = 1, 20 do
+			if player.Parent ~= Players then return end
+			local profile = PlayerState.Get(player)
+			if profile then
+				ensureTutorialTable(profile)
+				player:SetAttribute("TutorialStep", profile.Tutorial.Step or 1)
+				player:SetAttribute("TutorialDone", profile.Tutorial.Done == true)
+				player:SetAttribute("SandyGateUnlocked", profile.SandyGateUnlocked == true)
+				if not profile.Tutorial.Done and (profile.Tutorial.Step == 1 or profile.Tutorial.Step == 4) then
+					ensureNearbyTutorialMound(player)
+				end
+				return
+			end
+			task.wait(0.5)
+		end
+	end)
+end
+
+ensureTutorialTable = function(profile: Types.PlayerProfile)
 	if type(profile.Tutorial) ~= "table" then
 		profile.Tutorial = { Step = 1, Done = false }
 	end
@@ -91,6 +137,9 @@ function TutorialService.AdvanceTutorialStep(player: Player, fromStep: number): 
 	end)
 
 	if advanced then
+		if profile.Tutorial.Step == 4 then
+			ensureNearbyTutorialMound(player)
+		end
 		ShovelInventoryService.SendStateSync(player)
 		DataService.SavePlayer(player)
 		print(string.format("[TutorialService] Player %s advanced tutorial: Step %d -> %d (Done: %s)",
@@ -419,22 +468,21 @@ function TutorialService.Start()
 	Remotes.OnServerEvent("AdvanceTutorial", function(player: Player, step: any)
 		if type(step) == "number" then
 			if step >= 5 then
-				TutorialService.CompleteTutorial(player)
+				local profile = PlayerState.Get(player)
+				if profile and profile.Tutorial and profile.Tutorial.Step == 5 and isAtShovelShop(player) then
+					TutorialService.CompleteTutorial(player)
+				end
 			else
 				TutorialService.AdvanceTutorialStep(player, step)
 			end
 		end
 	end)
 
-	Players.PlayerAdded:Connect(function(player: Player)
-		local profile = PlayerState.Get(player)
-		if profile then
-			ensureTutorialTable(profile)
-			player:SetAttribute("TutorialStep", profile.Tutorial.Step or 1)
-			player:SetAttribute("TutorialDone", profile.Tutorial.Done == true)
-			player:SetAttribute("SandyGateUnlocked", profile.SandyGateUnlocked == true)
-		end
-	end)
+	Players.PlayerAdded:Connect(setupTutorialPlayer)
+
+	for _, player in Players:GetPlayers() do
+		setupTutorialPlayer(player)
+	end
 end
 
 return TutorialService

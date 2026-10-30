@@ -856,7 +856,7 @@ local function buildPetBagGui()
 	backdrop.Name = "ModalBackdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
-	backdrop.BackgroundTransparency = 0.45
+	backdrop.BackgroundTransparency = 1
 	backdrop.BorderSizePixel = 0
 	backdrop.AutoButtonColor = false
 	backdrop.Text = ""

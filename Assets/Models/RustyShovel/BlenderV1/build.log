@@ -1,0 +1,27 @@
+D:\DigPals\Assets\Models\RustyShovel\BlenderV1\build_rusty_shovel.py:40: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  m.use_nodes = True
+D:\DigPals\Assets\Models\RustyShovel\BlenderV1\build_rusty_shovel.py:226: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  final=bpy.data.materials.new('Oxide07_BakedPBR');final.use_nodes=True
+
+FBX export starting... 'D:\\DigPals\\Assets\\Models\\RustyShovel\\BlenderV1\\RustyShovel_Oxide07.fbx'
+export finished in 0.0208 sec.
+INFO Draco is available, use library at C:\Program Files\Blender Foundation\Blender 5.2\5.2\scripts\addons_core\io_scene_gltf2\bf_intern_draco_bridge.dll
+INFO MeshOptimizer is available, use library at C:\Program Files\Blender Foundation\Blender 5.2\5.2\scripts\addons_core\io_scene_gltf2\bf_intern_meshopt_bridge.dll
+06:18:07 | INFO: Starting glTF 2.0 export
+06:18:07 | INFO: Extracting primitive: Forged cupped blade
+06:18:08 | WARNING: More than one shader node tex image used for a texture. The resulting glTF sampler will behave like the first shader node tex image.
+06:18:08 | INFO: Primitives created: 1
+06:18:08 | INFO: Finished glTF 2.0 export in 0.46274685859680176 s
+
+ASSET_STATS {"design": "Oxide No. 07", "visual_version": "Oxide07BlenderV1", "vertices": 2674, "triangles": 5264, "materials": 1, "texture_resolution": 2048, "height": 5.4, "width": 1.524149, "depth": 0.34851, "export_up_axis": "+Y", "hand_hold_local_y": 1.6, "shared_carry": "DiagonalCarryV4", "studio_verified": false}
+00:11.329  render           | Saved: 'D:\DigPals\Assets\Models\RustyShovel\BlenderV1\Preview_Hero.png'
+00:20.641  render           | Saved: 'D:\DigPals\Assets\Models\RustyShovel\BlenderV1\Preview_Front.png'
+00:29.516  render           | Saved: 'D:\DigPals\Assets\Models\RustyShovel\BlenderV1\Preview_Back.png'
+00:29.516  reports          | WARNING Path 'C:\Program Files\Blender Foundation\Blender 5.2\5.2\datafiles\assets\brushes\essentials_brushes-gp_draw.blend' cannot be made relative for Material 'Dots Stroke'
+Blender 5.2.3 LTS (hash e13b728c6880 built 2026-10-22 01:37:16)
+00:29.516  reports          | WARNING Path 'C:\Program Files\Blender Foundation\Blender 5.2\5.2\datafiles\assets\brushes\essentials_brushes-gp_draw.blend' cannot be made relative for Material 'Material'
+00:29.547  image.write      | ERROR OpenImageIO write failed: Could not open file "C:\Users\Lenovo\.thumbnails\large\blender_39676_9b83ed451f6c7ea491065b5aa560deb7.png.png"
+Info: Saved as "RustyShovel_Oxide07.blend"
+COMPLETE
+
+Blender quit

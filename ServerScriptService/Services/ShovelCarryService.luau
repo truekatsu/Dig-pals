@@ -46,13 +46,13 @@ function Service.BindCharacter(player: Player, character: Model)
     joint.Name = "ShovelCarryJoint"
     joint.Part0 = torso
     joint.Part1 = handle
-    joint.C0 = Carry.Held * held.Grip
+    joint.C0 = Carry.GetHeldCFrame(torso) * held.Grip
     joint.Parent = handle
     local tool = held
     local motor = joint
     if gripConnection then gripConnection:Disconnect() end
     gripConnection = tool:GetPropertyChangedSignal("Grip"):Connect(function()
-     if motor.Parent then motor.C0 = Carry.Held * tool.Grip end
+     if motor.Parent then motor.C0 = Carry.GetHeldCFrame(torso) * tool.Grip end
     end)
     -- Tool destruction disconnects its property signal automatically.
 

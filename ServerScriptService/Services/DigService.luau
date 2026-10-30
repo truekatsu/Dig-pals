@@ -24,6 +24,9 @@ export type StrikeSession = {
 	MoundId: string,
 	StartTime: number,
 	LastStrikeTime: number,
+	PerfectCount: number,
+	GoodCount: number,
+	MissCount: number,
 	Attempt: DigTiming.Attempt,
 }
 
@@ -91,6 +94,14 @@ function DigService.CancelSession(userId: number)
 	SharedMoundService.CancelSession(userId)
 end
 
+local function cancelSessionsForMound(moundId: string)
+	for sessionUserId, session in activeSessionsByUserId do
+		if session.MoundId == moundId then
+			activeSessionsByUserId[sessionUserId] = nil
+		end
+	end
+end
+
 function DigService.StartSession(
 	userId: number,
 	player: Player?,
@@ -145,9 +156,11 @@ function DigService.StartSession(
 		MoundId = moundId,
 		StartTime = now,
 		LastStrikeTime = if existing then existing.LastStrikeTime else 0,
-		Attempt = DigTiming.New(shovel.Id, mound.Size, now, mound.MissCount),
+		PerfectCount = 0,
+		GoodCount = 0,
+		MissCount = 0,
+		Attempt = DigTiming.New(shovel.Id, mound.Size, now, 0),
 	}
-	mound.DigFailed = false
 	activeSessionsByUserId[userId] = session
 	MoundService.TouchMound(userId, moundId)
 
@@ -269,18 +282,18 @@ function DigService.ExecuteStrike(
 	local QuestService = require(script.Parent:WaitForChild("QuestService"))
 
 	if grade == "Perfect" then
-		mound.PerfectCount += 1
+		session.PerfectCount += 1
 		if player then
 			QuestService.RecordProgress(player, "PerfectStrike", 1)
 			QuestService.RecordProgress(player, "PerfectStrikeTotal", 1)
 		end
 	elseif grade == "Good" then
-		mound.GoodCount += 1
+		session.GoodCount += 1
 		if player then
 			QuestService.RecordProgress(player, "BreakPerfectStreak", 1)
 		end
 	else
-		mound.MissCount += 1
+		session.MissCount += 1
 		if player then
 			QuestService.RecordProgress(player, "BreakPerfectStreak", 1)
 		end
@@ -288,13 +301,12 @@ function DigService.ExecuteStrike(
 
 	session.LastStrikeTime = serverNow
 	if DigTiming.RecordStrike(session.Attempt, grade) then
-		mound.HP = mound.MaxHP
-		mound.PerfectCount, mound.GoodCount, mound.MissCount = 0, 0, 0
-		mound.DigFailed = true
+		-- A failed attempt is private to this player. It must not heal or lock the
+		-- shared server mound for everyone else.
+		activeSessionsByUserId[userId] = nil
 		MoundService.TouchMound(userId, moundId)
 		if player and player.Parent == Players then
 			ShovelInventoryService.PlayStrikeSwing(player)
-			Remotes.GetEvent("MoundUpdated"):FireClient(player, mound.Id, mound.HP, mound.MaxHP)
 			Remotes.GetEvent("StrikeResult"):FireClient(player, {
 				Event = "DigFailed", MoundId = mound.Id, RemainingHP = mound.HP,
 				MaxHP = mound.MaxHP, Minigame = session.Attempt,
@@ -320,11 +332,11 @@ function DigService.ExecuteStrike(
 	)
 
 	local cleared = mound.HP <= 0
+	Remotes.GetEvent("MoundUpdated"):FireAllClients(mound.Id, mound.HP, mound.MaxHP)
 
 	if player and player.Parent == Players then
 		ShovelInventoryService.EnsureShovelHeldForDig(player)
 		ShovelInventoryService.PlayStrikeSwing(player)
-		Remotes.GetEvent("MoundUpdated"):FireClient(player, mound.Id, mound.HP, mound.MaxHP)
 		Remotes.GetEvent("StrikeResult"):FireClient(player, {
 			Event = "StrikeHit",
 			MoundId = mound.Id,
@@ -340,14 +352,17 @@ function DigService.ExecuteStrike(
 	end
 
 	if cleared then
-		activeSessionsByUserId[userId] = nil
+		mound.PerfectCount = session.PerfectCount
+		mound.GoodCount = session.GoodCount
+		mound.MissCount = session.MissCount
+		cancelSessionsForMound(mound.Id)
 		for _, callback in moundClearedCallbacks do
 			local ok, err = pcall(callback, player, userId, mound)
 			if not ok then
 				warn(string.format("[DigService] Error in MoundClearedCallback: %s", tostring(err)))
 			end
 		end
-		MoundService.DespawnMound(userId, mound.Id, "Cleared")
+		MoundService.DespawnMound(0, mound.Id, "Cleared")
 	end
 
 	return {
@@ -372,7 +387,7 @@ function DigService.ApplyPetDamage(
 	end
 
 	local mound = MoundService.GetMound(userId, moundId)
-	if not mound or mound.DigFailed then
+	if not mound then
 		return false, 0, false
 	end
 
@@ -397,23 +412,29 @@ function DigService.ApplyPetDamage(
 	)
 
 	local cleared = mound.HP <= 0
+	Remotes.GetEvent("MoundUpdated"):FireAllClients(mound.Id, mound.HP, mound.MaxHP)
 
 	if player and player.Parent == Players then
-		Remotes.GetEvent("MoundUpdated"):FireClient(player, mound.Id, mound.HP, mound.MaxHP)
-		Remotes.GetEvent("PetAttackVisual"):FireClient(player, petGuid, mound.Id, damage)
+		Remotes.GetEvent("PetAttackVisual"):FireAllClients(petGuid, mound.Id, damage)
 	end
 
 	if cleared then
-		if activeSessionsByUserId[userId] and activeSessionsByUserId[userId].MoundId == moundId then
-			activeSessionsByUserId[userId] = nil
+		local clearingSession = activeSessionsByUserId[userId]
+		if clearingSession and clearingSession.MoundId == moundId then
+			mound.PerfectCount = clearingSession.PerfectCount
+			mound.GoodCount = clearingSession.GoodCount
+			mound.MissCount = clearingSession.MissCount
+		else
+			mound.PerfectCount, mound.GoodCount, mound.MissCount = 0, 0, 0
 		end
+		cancelSessionsForMound(moundId)
 		for _, callback in moundClearedCallbacks do
 			local ok, err = pcall(callback, player, userId, mound)
 			if not ok then
 				warn(string.format("[DigService] Error in MoundClearedCallback from PetStrike: %s", tostring(err)))
 			end
 		end
-		MoundService.DespawnMound(userId, mound.Id, "Cleared")
+		MoundService.DespawnMound(0, mound.Id, "Cleared")
 	end
 
 	return true, mound.HP, cleared

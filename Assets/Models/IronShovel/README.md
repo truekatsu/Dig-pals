@@ -1,14 +1,13 @@
-# Iron Shovel replacement
+# Native Iron Shovel
 
-User-supplied Iron_Shovel.fbx and PBR atlas. Shared carry height: 5.4 studs. Source hand hold: Z=0.76m; mesh center (0.0095, 0.599, -0.011) in Roblox axes. Imported pivot rotation reset. Optional 3D GripOffset compensates for asymmetric bounds.
+`IronShovelModel.luau`, version `ForgedIronV2`, uses the native Rusty silhouette with the supplied aged-iron shovel reference: a cylindrical timber shaft, wooden D-grip crossbar, iron grip frame, wide spade with a short flat tip, extended tapered socket, and narrow cutting edges. There are 20 native parts, including the invisible unrotated Handle at the shared hand hold.
 
-Roblox uploads:
-- Mesh: 114977741903180
-- Diffuse: 102852578306662
-- Roughness: 83164652337082
-- Metallic: 130463664697287
-- Icon: 121468431182146
+`IronShovelAsset.luau` records icon `rbxassetid://75407507066499` and the `DigPalsIronShovelSteelV1` PBR material definition (color, normal, roughness, metalness; 2-stud tiling). The user confirmed worn iron rather than stone. The material is recreated automatically when missing. Alternate generated samples remain in Studio's AssistantMaterials library.
 
-Studio template: ReplicatedStorage.ShovelAssets.IronShovelMesh with SurfaceAppearance. Shared/IronShovelAsset.luau supplies the builder and inventory icon. Icon generated from the supplied Blender source using render_icon.py, saved at Assets/Icons/icon_iron_shovel.png.
+The shared `ShovelModelBuilder` native registry builds previews and gameplay Tools, invalidates older Iron visuals, and applies the same nominal 5.4-stud `DiagonalCarryV4` carry convention. There are no per-shovel grip constants or gameplay-stat changes. Hand targets, back cosmetics, two-hand animation, and strike recovery remain shared.
 
-Prior Studio sources/templates are backed up under ServerStorage.BeforeIronShovelImport. Validated: mesh/diffuse preload, preview/Tool geometry, icon, 5.4-stud height, Rusty/Stone/Iron switching, two equip/stow cycles, swing recovery and respawn. Gameplay stats unchanged. Not published to live.
+Old imported sources, mesh, Tool, and preview are backed up under `ServerStorage.BeforeNativeIronShovel`. Earlier FBX/PBR files and `ServerStorage.BeforeIronShovelImport` remain historical assets and are not the active Iron visual.
+
+`native_geometry.json` is an export of the native part specs. `render_native_icon.py` renders the transparent icon with cylindrical geometry, wood grain, and an approximate worn-metal shader. The actual in-game surface uses the saved PBR maps.
+
+Validated in Studio: identity Handle, nominal 5.4-stud height (within 0.01 studs), PBR material recreation, Rusty/Stone/Iron switching, safe cosmetic back model, arm restoration, shared strike recovery, respawn without duplicate visuals, and updated Tool/preview asset versions. The inventory/hotbar icon definition is updated to the new render. The old imported mesh is absent from active world and asset templates. The place has not been published live.

@@ -1,0 +1,15 @@
+{
+  "design": "Oxide No. 07",
+  "visual_version": "Oxide07BlenderV1",
+  "vertices": 2674,
+  "triangles": 5264,
+  "materials": 1,
+  "texture_resolution": 2048,
+  "height": 5.4,
+  "width": 1.524149,
+  "depth": 0.34851,
+  "export_up_axis": "+Y",
+  "hand_hold_local_y": 1.6,
+  "shared_carry": "DiagonalCarryV4",
+  "studio_verified": false
+}

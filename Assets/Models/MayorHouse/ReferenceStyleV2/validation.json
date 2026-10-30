@@ -1,0 +1,44 @@
+{
+  "MayorHouse_Architecture.fbx": {
+    "meshes": 37,
+    "vertices": 32630,
+    "polygons": 28668,
+    "max_triangles_per_mesh": 17004,
+    "world_bounds_xyz": [
+      [
+        -9.672,
+        9.672
+      ],
+      [
+        -17.975,
+        8.275
+      ],
+      [
+        -0.0,
+        11.95
+      ]
+    ],
+    "passed": true
+  },
+  "Mayor_NPC.fbx": {
+    "meshes": 24,
+    "vertices": 256,
+    "polygons": 224,
+    "max_triangles_per_mesh": 44,
+    "world_bounds_xyz": [
+      [
+        -1.235,
+        1.235
+      ],
+      [
+        -0.655,
+        0.65
+      ],
+      [
+        -0.0,
+        4.8
+      ]
+    ],
+    "passed": true
+  }
+}

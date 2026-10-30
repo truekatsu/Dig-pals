@@ -1,0 +1,59 @@
+{
+  "source_triangles": 5264,
+  "uv_layers": 1,
+  "texture_size": [
+    2048,
+    2048
+  ],
+  "round_trips": {
+    "fbx": {
+      "mesh_count": 1,
+      "triangles": 5264,
+      "max_vertex_error": 3.1680303891334916e-07,
+      "uv_preserved": true,
+      "material_count": 1,
+      "world_dimensions": [
+        1.5241491794586182,
+        5.400000095367432,
+        0.34851008653640747
+      ],
+      "rotation_degrees": [
+        89.999995674289,
+        -0.0,
+        0.0
+      ]
+    },
+    "glb": {
+      "mesh_count": 1,
+      "triangles": 5264,
+      "max_vertex_error": 0.0,
+      "uv_preserved": true,
+      "material_count": 1,
+      "world_dimensions": [
+        1.5241491794586182,
+        0.34851008653640747,
+        5.400000095367432
+      ],
+      "rotation_degrees": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "studio_gameplay_tested": false,
+  "glb_raw_axis_bounds": {
+    "min": [
+      -0.7641491293907166,
+      -2.700000047683716,
+      -0.17560048401355743
+    ],
+    "max": [
+      0.7599999904632568,
+      2.700000047683716,
+      0.17290960252285004
+    ]
+  },
+  "glb_embedded_pbr": true,
+  "passed": true
+}

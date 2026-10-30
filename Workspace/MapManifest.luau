@@ -16,10 +16,14 @@ local MapManifest = {
 	},
 	Merchant = {
 		Path = "Workspace.Plain.Merchant",
-		ItemMerchantFloor = Vector3.new(-20.0, 0.25, -92.0),
-		ItemMerchantCounter = Vector3.new(-20.0, 1.95, -86.5),
-		ShovelShopFloor = Vector3.new(20.0, 0.25, -92.0),
-		ShovelShopCounter = Vector3.new(20.0, 1.95, -86.5),
+		ItemMerchantModel = "Workspace.Plain.Merchant.TheMerchant",
+		ItemMerchantPivot = CFrame.new(-50.2, 0.6, -112.0) * CFrame.Angles(0, math.pi / 2, 0),
+		ItemMerchantFloor = Vector3.new(-50.2, 3.65, -112.0),
+		ItemMerchantCounter = Vector3.new(-40.7, 5.6, -112.0),
+		ShovelShopModel = "Workspace.Plain.Merchant.TheShovelkeeper",
+		ShovelShopPivot = CFrame.new(44.4, 2.0, -112.0),
+		ShovelShopFloor = Vector3.new(44.4, 3.05, -112.0),
+		ShovelShopCounter = Vector3.new(41.0, 4.75, -112.0),
 	},
 	SharedMoundSpawns = {
 		Path = "Workspace.Plain.SharedMoundSpawns",

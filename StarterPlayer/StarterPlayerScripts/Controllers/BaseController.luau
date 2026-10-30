@@ -371,38 +371,8 @@ function BaseController.IsOpen(): boolean
 	return isOpen
 end
 
-function BaseController.OpenIncubatorModal(slotIndex: number)
-	if InventoryController.IsOpen() then
-		InventoryController.ClosePanel()
-	end
-	if MerchantController.IsOpen() then
-		MerchantController.ClosePanel()
-	end
-	if ShovelShopController.IsOpen() then
-		ShovelShopController.ClosePanel()
-	end
-
-	activeSlotIndex = math.clamp(slotIndex, 1, 5)
-	isOpen = true
-	setStatusBanner(nil, false)
-
-	if backdropButton then
-		backdropButton.Visible = true
-	end
-	if panelFrame then
-		panelFrame.Visible = true
-	end
-
-	task.spawn(function()
-		local ok, snap = pcall(function()
-			return Remotes.GetFunction("GetInventoryState"):InvokeServer()
-		end)
-		if ok and type(snap) == "table" then
-			BaseController.ApplySnapshot(snap)
-		end
-	end)
-
-	rebuildEggBagList()
+function BaseController.OpenIncubatorModal(_slotIndex: number)
+	-- Egg selection and placement now use Items > Eggs and the carried egg.
 end
 
 function BaseController.CloseIncubatorModal()
@@ -646,7 +616,7 @@ local function buildIncubatorGui()
 	backdrop.Name = "ModalBackdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
-	backdrop.BackgroundTransparency = 0.45
+	backdrop.BackgroundTransparency = 1
 	backdrop.BorderSizePixel = 0
 	backdrop.AutoButtonColor = false
 	backdrop.Text = ""
@@ -1136,7 +1106,7 @@ function BaseController.Start()
 		baseLevel = attrBaseLv
 	end
 
-	buildIncubatorGui()
+	-- The legacy incubator picker has been removed.
 
 	local function bindCameraViewport()
 		local cam = workspace.CurrentCamera
@@ -1178,7 +1148,7 @@ function BaseController.Start()
 		end
 		local slotAttr = prompt:GetAttribute("DigPalsIncubatorSlot")
 		if type(slotAttr) == "number" then
-			BaseController.OpenIncubatorModal(slotAttr)
+			-- Legacy station prompts no longer open the removed picker.
 		end
 	end)
 

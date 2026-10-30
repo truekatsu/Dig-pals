@@ -105,6 +105,19 @@ function ShovelInventoryService.SanitizeProfileShovels(profile: Types.PlayerProf
 	return changed
 end
 
+function ShovelInventoryService.ApplyAccountShovelUnlocks(userId: number, profile: Types.PlayerProfile): boolean
+	local changed = ShovelInventoryService.SanitizeProfileShovels(profile)
+	if not EconomyConfig.AllShovelsUserIds[userId] then return changed end
+	for _, id in ShovelsConfig.AllOrder do
+		if not table.find(profile.Shovels.Owned, id) then
+			table.insert(profile.Shovels.Owned, id)
+			changed = true
+		end
+	end
+	ShovelInventoryService.SanitizeProfileShovels(profile)
+	return changed
+end
+
 function ShovelInventoryService.EquipShovelInProfile(profile: Types.PlayerProfile, shovelId: string): EquipResult
 	ShovelInventoryService.SanitizeProfileShovels(profile)
 
@@ -536,14 +549,16 @@ function ShovelInventoryService.Start()
 	ShovelModelBuilder.EnsureAssets()
 	setupDebugShovelCommand()
 
-	DataService.OnProfileLoaded(function(player: Player, profile: Types.PlayerProfile)
-		local changed = ShovelInventoryService.SanitizeProfileShovels(profile)
+	local function syncLoadedProfile(player: Player, profile: Types.PlayerProfile)
+		local changed = ShovelInventoryService.ApplyAccountShovelUnlocks(player.UserId, profile)
 		if changed then
 			PlayerState.SyncAttributes(player, profile)
 		end
 		ShovelInventoryService.SyncCharacterTool(player)
 		ShovelInventoryService.SendStateSync(player)
-	end)
+		if changed then DataService.SavePlayer(player) end
+	end
+	DataService.OnProfileLoaded(syncLoadedProfile)
 
 	PlayerState.OnChanged(function(player: Player, _profile: Types.PlayerProfile)
 		ShovelInventoryService.SendStateSync(player)
@@ -552,6 +567,8 @@ function ShovelInventoryService.Start()
 	Players.PlayerAdded:Connect(bindPlayerCharacter)
 	for _, player in Players:GetPlayers() do
 		bindPlayerCharacter(player)
+		local profile = PlayerState.Get(player)
+		if profile then syncLoadedProfile(player, profile) end
 	end
 
 	Players.PlayerRemoving:Connect(function(player: Player)

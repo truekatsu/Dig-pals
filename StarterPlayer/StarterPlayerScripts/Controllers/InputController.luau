@@ -17,7 +17,6 @@ local LeaderboardController = require(Controllers:WaitForChild("LeaderboardContr
 local BaseController = require(Controllers:WaitForChild("BaseController"))
 local MerchantController = require(Controllers:WaitForChild("MerchantController"))
 local OfflineIncomeController = require(Controllers:WaitForChild("OfflineIncomeController"))
-local TeleportController = require(Controllers:WaitForChild("TeleportController"))
 
 local InputController = {}
 local started = false
@@ -129,6 +128,8 @@ local hotbarKeys = {
 }
 
 local function handleInputBegan(input: InputObject, gameProcessed: boolean)
+	-- DigController owns strike/cancel input while every other game panel is hidden.
+	if Players.LocalPlayer:GetAttribute("DigMinigameActive") == true then return end
 	if isTextInputActive() then
 		return
 	end
@@ -152,16 +153,10 @@ local function handleInputBegan(input: InputObject, gameProcessed: boolean)
 		InventoryController.SelectHotbarSlot(hotbarKeys[key])
 	elseif key == Enum.KeyCode.B then
 		toggleInventory()
-	elseif key == Enum.KeyCode.P then
-		togglePets()
 	elseif key == Enum.KeyCode.I then
 		toggleIndex()
 	elseif key == Enum.KeyCode.Q then
 		toggleQuests()
-	elseif key == Enum.KeyCode.L then
-		toggleLeaderboard()
-	elseif key == Enum.KeyCode.T then
-		TeleportController.Toggle()
 	end
 
 	-- Gamepad Buttons
@@ -187,6 +182,16 @@ function InputController.Start()
 	end
 	started = true
 
+	-- These keys are intentionally inactive for gameplay; text fields still accept typing.
+	ContextActionService:BindActionAtPriority(
+		"DisabledGameplayShortcuts",
+		function()
+			return if isTextInputActive() then Enum.ContextActionResult.Pass else Enum.ContextActionResult.Sink
+		end,
+		false,
+		Enum.ContextActionPriority.High.Value,
+		Enum.KeyCode.R, Enum.KeyCode.T, Enum.KeyCode.L, Enum.KeyCode.P
+	)
 	UserInputService.InputBegan:Connect(handleInputBegan)
 end
 

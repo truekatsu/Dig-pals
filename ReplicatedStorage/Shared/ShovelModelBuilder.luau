@@ -8,15 +8,18 @@ local Shared = script.Parent
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
 
 local Carry = require(Shared:WaitForChild("Config"):WaitForChild("ShovelCarry"))
+local NativeModels: {[string]: {Version: string, GetPartSpecs: () -> {any}}} = {
+ StoneShovel = require(Shared:WaitForChild("StoneShovelModel")),
+ IronShovel = require(Shared:WaitForChild("IronShovelModel")),
+}
 local ShovelModelBuilder = {}
 type ImportedShovelAsset = {
  Version: string, MeshId: string, ColorMap: string, RoughnessMap: string,
- MetalnessMap: string, Icon: string, Scale: number, Size: Vector3, GripOffsetY: number, GripOffset: Vector3?,
+ MetalnessMap: string, NormalMap: string?, UsePBR: boolean?, Icon: string, Scale: number, Size: Vector3, GripOffsetY: number?, GripOffset: Vector3?,
 }
 local ImportedAssets: {[string]: ImportedShovelAsset} = {
- RustyShovel = require(Shared:WaitForChild("RustyShovelAsset")),
- StoneShovel = require(Shared:WaitForChild("StoneShovelAsset")),
- IronShovel = require(Shared:WaitForChild("IronShovelAsset")),
+	RustyShovel = require(Shared:WaitForChild("RustyShovelAsset")),
+	GoldenShovel = require(Shared:WaitForChild("GoldenShovelAsset")),
 }
 
 -- Clone the imported MeshPart to retain its PBR maps. The FileMesh path also
@@ -50,6 +53,18 @@ local function createImportedVisual(shovelId: string, anchored: boolean): BasePa
  part.CanTouch = false
  part.Massless = true
  part.CastShadow = false
+ if asset.UsePBR == false and part:IsA("MeshPart") then
+  -- Preserve imported PBR maps for reactivation without allowing a failed
+  -- texture pack to hide the albedo. Nested SurfaceAppearance is data only.
+  local surface = part:FindFirstChildOfClass("SurfaceAppearance")
+  if surface then
+   local source = Instance.new("Folder")
+   source.Name = "PBRSource"
+   source.Parent = part
+   surface.Parent = source
+  end
+  part.TextureID = asset.ColorMap
+ end
  return part
 end
 
@@ -61,6 +76,7 @@ type PartSpec = {
 	CFrame: CFrame,
 	Color: Color3,
 	Material: Enum.Material,
+	MaterialVariant: string?,
 	Reflectance: number?,
 	Transparency: number?,
 }
@@ -206,6 +222,10 @@ local THEMES: { [string]: ShovelVisualTheme } = {
 }
 
 local function buildShovelPartSpecs(shovelId: string): { PartSpec }
+	local native = NativeModels[shovelId]
+	if native then
+		return native.GetPartSpecs()
+	end
 	local theme = THEMES[shovelId] or THEMES.RustyShovel
 	local specs: { PartSpec } = {}
 
@@ -458,6 +478,7 @@ local function instantiateSpecPart(spec: PartSpec, anchored: boolean): BasePart
 	part.CFrame = spec.CFrame
 	part.Color = spec.Color
 	part.Material = spec.Material
+	part.MaterialVariant = spec.MaterialVariant or ""
 	part.Reflectance = spec.Reflectance or 0
 	part.Transparency = spec.Transparency or 0
 	part.TopSurface = Enum.SurfaceType.Smooth
@@ -497,7 +518,41 @@ function ShovelModelBuilder.BuildPreviewModel(shovelId: string): Model
 	if handlePart then
 		model.PrimaryPart = handlePart
 	end
+	local native = NativeModels[shovelId]
+	if native then model:SetAttribute("VisualVersion", native.Version) end
 	return model
+end
+
+-- Shop decorations share the same visual source as held and back shovels.
+function ShovelModelBuilder.EnsureRustyDisplayModels(root: Instance)
+	for _, old in root:GetDescendants() do
+		local legacy = old:IsA("MeshPart") and old.MeshId == "rbxassetid://87169671105639"
+		local outdated = old:IsA("Model") and old:GetAttribute("ShovelId") == "RustyShovel"
+			and old:GetAttribute("DisplayHeight") ~= nil and old:GetAttribute("VisualVersion") ~= ImportedAssets.RustyShovel.Version
+		if legacy or outdated then
+			local cf: CFrame
+			local height: number
+			if old:IsA("BasePart") then
+				cf, height = old.CFrame, old.Size.Y
+			elseif old:IsA("Model") then
+				cf = old:GetBoundingBox()
+				height = old:GetAttribute("DisplayHeight") :: number
+			else
+				continue
+			end
+			local model = ShovelModelBuilder.BuildPreviewModel("RustyShovel")
+			model.Name = old.Name
+			model:SetAttribute("CosmeticOnly", true)
+			model:SetAttribute("DisplayHeight", height)
+			model:ScaleTo(height / model:GetExtentsSize().Y)
+			local box = model:GetBoundingBox()
+			for _, part in model:GetChildren() do
+				if part:IsA("BasePart") then part.CFrame = cf * box:ToObjectSpace(part.CFrame) end
+			end
+			model.Parent = old.Parent
+			old:Destroy()
+		end
+	end
 end
 
 function ShovelModelBuilder.BuildBagPreviewModel(): Model
@@ -650,7 +705,7 @@ function ShovelModelBuilder.BuildGameplayTool(shovelId: string): Tool
   handle.Massless = true
   handle.Parent = tool
   local visual = createImportedVisual(shovelId, false)
-  visual.CFrame = CFrame.new(asset.GripOffset or Vector3.new(0, asset.GripOffsetY, 0))
+  visual.CFrame = CFrame.new(asset.GripOffset or Vector3.new(0, asset.GripOffsetY or 0, 0))
   visual.Parent = tool
   local weld = Instance.new("WeldConstraint")
   weld.Part0 = handle
@@ -683,6 +738,8 @@ function ShovelModelBuilder.BuildGameplayTool(shovelId: string): Tool
 		end
 	end
 
+	local native = NativeModels[shovelId]
+	if native then tool:SetAttribute("VisualVersion", native.Version) end
 	return applyCarryDefaults(tool)
 end
 
@@ -704,6 +761,10 @@ function ShovelModelBuilder.EnsureAssets(): Folder
 	local toolsFolder = ensureChildFolder(root, "ShovelTools")
 
  for _, folder in { previewsFolder, toolsFolder } do
+  for id, native in NativeModels do
+   local old = folder:FindFirstChild(id)
+   if old and old:GetAttribute("VisualVersion") ~= native.Version then old:Destroy() end
+  end
   for id, asset in ImportedAssets do
    local old = folder:FindFirstChild(id)
    if old and old:GetAttribute("VisualVersion") ~= asset.Version then

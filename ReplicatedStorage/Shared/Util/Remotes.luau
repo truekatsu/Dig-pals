@@ -215,6 +215,20 @@ local Specs: { [string]: RemoteSpec } = {
 		Validators = { Validators.String, Validators.PositiveInt },
 		Description = "Client -> Server: Sells a specific quantity of itemId (string, positiveInt).",
 	},
+	AssignCarrySlot = {Name="AssignCarrySlot", Kind="RemoteFunction", Direction="ClientToServer", RateLimitPerSecond=10, Validators={Validators.String,Validators.String,Validators.String}, Description="Assign owned item, egg or pet to slots 4-9."},
+	SelectCarrySlot = {Name="SelectCarrySlot", Kind="RemoteFunction", Direction="ClientToServer", RateLimitPerSecond=10, Validators={Validators.NonNegativeInt}, Description="Equip or stow an inventory hotbar object."},
+	GetCarryHotbar = {Name="GetCarryHotbar", Kind="RemoteFunction", Direction="ClientToServer", RateLimitPerSecond=5, Validators={}, Description="Read the inventory hotbar."},
+	CarryHotbarState = {Name="CarryHotbarState", Kind="RemoteEvent", Direction="ServerToClient", RateLimitPerSecond=10, Validators={}, Description="Sync assigned inventory hotbar slots."},
+	PlaceCarriedEgg = {Name="PlaceCarriedEgg", Kind="RemoteFunction", Direction="ClientToServer", RateLimitPerSecond=5, Validators={Validators.Number,Validators.Number,Validators.Number}, Description="Place the owned equipped egg on the player's own base."},
+	PlaceCarriedPet = {Name="PlaceCarriedPet", Kind="RemoteFunction", Direction="ClientToServer", RateLimitPerSecond=5, Validators={Validators.Number,Validators.Number,Validators.Number}, Description="Put a held pet in own base for income or deploy as follower outside bases."},
+	HoldItem = {
+		Name = "HoldItem", Kind = "RemoteFunction", Direction = "ClientToServer", RateLimitPerSecond = 5,
+		Validators = { Validators.String }, Description = "Hold one owned loot item.",
+	},
+	SellHeldItem = {
+		Name = "SellHeldItem", Kind = "RemoteFunction", Direction = "ClientToServer", RateLimitPerSecond = 5,
+		Validators = {}, Description = "Sell one server-owned equipped loot item near The Merchant.",
+	},
 	SellAllItems = {
 		Name = "SellAllItems",
 		Kind = "RemoteFunction",
@@ -256,6 +270,14 @@ local Specs: { [string]: RemoteSpec } = {
 		RateLimitPerSecond = 5,
 		Validators = {},
 		Description = "Client -> Server: Fetches authoritative initial shovel and inventory state once profile is loaded.",
+	},
+	SetSprinting = {
+		Name = "SetSprinting",
+		Kind = "RemoteEvent",
+		Direction = "ClientToServer",
+		RateLimitPerSecond = 10,
+		Validators = { Validators.Boolean },
+		Description = "Client -> Server: Requests sprint on/off; server chooses speed.",
 	},
 	SetShovelToolActive = {
 		Name = "SetShovelToolActive",

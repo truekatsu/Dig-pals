@@ -8,6 +8,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Util"):WaitForChild("Types"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local ShovelsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Shovels"))
+local ShovelkeeperModelBuilder = require(Shared:WaitForChild("ShovelkeeperModelBuilder"))
+local ShovelModelBuilder = require(Shared:WaitForChild("ShovelModelBuilder"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local PlayerState = require(script.Parent:WaitForChild("PlayerState"))
@@ -120,7 +122,7 @@ function ShopService.BuyShovelInProfile(
 	}
 end
 
-local function attachShovelShopPrompt(anchorPart: BasePart, promptOffset: Vector3)
+local function attachShovelShopPrompt(anchorPart: BasePart, promptOffset: Vector3, actionText: string?, objectText: string?)
 	anchorPart:SetAttribute("DigPalsShovelShopNode", true)
 
 	local existingAtt = anchorPart:FindFirstChild("ShovelShopPromptAttachment")
@@ -139,31 +141,53 @@ local function attachShovelShopPrompt(anchorPart: BasePart, promptOffset: Vector
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "ShovelShopProximityPrompt"
-	prompt.ObjectText = "Shovel Shop"
-	prompt.ActionText = "Buka Toko Sekop"
+	prompt.ObjectText = objectText or "The Shovelkeeper"
+	prompt.ActionText = actionText or "Bicara"
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 12
+	prompt.MaxActivationDistance = 14
 	prompt.RequiresLineOfSight = false
 	prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
 	prompt.Parent = att
 
-	table.insert(shopAnchorParts, anchorPart)
+	if not table.find(shopAnchorParts, anchorPart) then
+		table.insert(shopAnchorParts, anchorPart)
+	end
 end
 
 function ShopService.EnsureShovelShopWorldPrompts()
 	table.clear(shopAnchorParts)
-
 	local plain = workspace:FindFirstChild("Plain")
-	local merchantFolder = plain and plain:FindFirstChild("Merchant")
-	local shopCounter = merchantFolder and merchantFolder:FindFirstChild("ShovelShop_Counter")
-	if shopCounter and shopCounter:IsA("BasePart") then
-		local oldBillboard = shopCounter:FindFirstChild("ShovelShopSignGui")
-		if oldBillboard then
-			oldBillboard:Destroy()
+	local merchant = plain and plain:FindFirstChild("Merchant")
+	if not merchant then return end
+	-- Remove the former bell/counter interaction and register the NPC instead.
+	for _, item in merchant:GetDescendants() do
+		if item.Name == "ShovelShopPromptAttachment" or item.Name == "ShovelShopProximityPrompt" or item.Name == "ShovelShopSignGui" then
+			item:Destroy()
+		elseif item:IsA("BasePart") and item:GetAttribute("DigPalsShovelShopNode") then
+			item:SetAttribute("DigPalsShovelShopNode", nil)
 		end
-		attachShovelShopPrompt(shopCounter, Vector3.new(0, 1.8, 0))
+	end
+	local shop = merchant:FindFirstChild("TheShovelkeeper")
+	local npc = shop and shop:FindFirstChild("ShovelkeeperNPC")
+	local head = npc and npc:FindFirstChild("Head")
+	if head and head:IsA("BasePart") then
+		head.CanQuery = true
+		attachShovelShopPrompt(head, Vector3.zero, "Bicara", "")
+		local prompt = head.ShovelShopPromptAttachment:FindFirstChildOfClass("ProximityPrompt")
+		if prompt then prompt.Style = Enum.ProximityPromptStyle.Custom end
+		if not head:FindFirstChild("ShovelkeeperTalkClick") then
+			local click = Instance.new("ClickDetector")
+			click.Name = "ShovelkeeperTalkClick"
+			click.MaxActivationDistance = 14
+			click.Parent = head
+		end
+	end
+	local counter = merchant:FindFirstChild("ShovelShop_Counter")
+	if counter and counter:IsA("BasePart") then
+		counter:SetAttribute("DigPalsShovelShopNode", true)
+		table.insert(shopAnchorParts, counter)
 	end
 end
 
@@ -262,7 +286,22 @@ function ShopService.Start()
 	end
 	started = true
 
+	local plain = workspace:FindFirstChild("Plain")
+	local merchant = plain and plain:FindFirstChild("Merchant")
+	local shop = merchant and merchant:FindFirstChild("TheShovelkeeper")
+	if shop and shop:IsA("Model") then
+		ShovelkeeperModelBuilder.EnsureForShop(shop)
+		ShovelModelBuilder.EnsureRustyDisplayModels(shop)
+	end
 	ShopService.EnsureShovelShopWorldPrompts()
+
+	-- Dynamic listener so importing The Shovelkeeper at runtime or in studio links the bell immediately
+	workspace.DescendantAdded:Connect(function(desc)
+		if desc.Name == "DeskBell" or desc.Name == "Counter_Bell" then
+			task.wait(0.1)
+			ShopService.EnsureShovelShopWorldPrompts()
+		end
+	end)
 
 	Remotes.OnServerInvoke("BuyShovel", function(player: Player, shovelId: string): BuyShovelResult
 		return ShopService.BuyShovel(player, shovelId, false)
