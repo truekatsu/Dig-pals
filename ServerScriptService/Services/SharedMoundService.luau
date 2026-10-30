@@ -636,9 +636,7 @@ function SharedMoundService.ApplyPetDamage(
 
 	local cleared = mound.HP <= 0
 
-	if player and player.Parent == Players then
-		Remotes.GetEvent("PetAttackVisual"):FireClient(player, petGuid, mound.Id, damage)
-	end
+	Remotes.GetEvent("PetAttackVisual"):FireAllClients(petGuid, mound.Id, damage)
 
 	Remotes.GetEvent("MoundUpdated"):FireAllClients(mound.Id, mound.HP, mound.MaxHP)
 

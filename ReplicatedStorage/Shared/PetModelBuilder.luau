@@ -89,7 +89,8 @@ local function createPetTagBillboard(
 	variant: string,
 	level: number,
 	rarityColor: Color3,
-	yOffset: number
+	yOffset: number,
+	ownerDisplayName: string?
 ): BillboardGui
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "PetTag"
@@ -122,7 +123,11 @@ local function createPetTagBillboard(
 	lvLabel.TextSize = 10
 	lvLabel.TextColor3 = Color3.fromRGB(240, 244, 250)
 	lvLabel.TextStrokeTransparency = 0.5
-	lvLabel.Text = "Lv." .. tostring(level)
+	if ownerDisplayName and #ownerDisplayName > 0 then
+		lvLabel.Text = string.format("Lv.%d • %s", level, ownerDisplayName)
+	else
+		lvLabel.Text = "Lv." .. tostring(level)
+	end
 	lvLabel.Parent = billboard
 
 	return billboard
@@ -134,7 +139,8 @@ local function createProceduralModel(
 	species: string,
 	variant: string,
 	level: number,
-	spawnPos: Vector3
+	spawnPos: Vector3,
+	ownerDisplayName: string?
 ): (Model, BasePart)
 	local model = Instance.new("Model")
 	model.Name = "PetVisual_" .. guid
@@ -185,7 +191,7 @@ local function createProceduralModel(
 	weld.Parent = root
 
 	addVariantEffects(root, variant)
-	createPetTagBillboard(root, species, variant, level, rarityColor, 1.8)
+	createPetTagBillboard(root, species, variant, level, rarityColor, 1.8, ownerDisplayName)
 
 	return model, root
 end
@@ -196,11 +202,12 @@ function PetModelBuilder.BuildPet(
 	species: string,
 	variant: string,
 	level: number,
-	spawnPos: Vector3
+	spawnPos: Vector3,
+	ownerDisplayName: string?
 ): (Model, BasePart)
 	local template = PetModels:FindFirstChild(species)
 	if not template or not template:IsA("Model") then
-		return createProceduralModel(guid, species, variant, level, spawnPos)
+		return createProceduralModel(guid, species, variant, level, spawnPos, ownerDisplayName)
 	end
 
 	local model = template:Clone()
@@ -213,7 +220,7 @@ function PetModelBuilder.BuildPet(
 	end
 
 	if not root then
-		return createProceduralModel(guid, species, variant, level, spawnPos)
+		return createProceduralModel(guid, species, variant, level, spawnPos, ownerDisplayName)
 	end
 
 	model.PrimaryPart = root
@@ -266,7 +273,7 @@ function PetModelBuilder.BuildPet(
 	-- Calculate top offset for billboard
 	local extents = model:GetExtentsSize()
 	local tagYOffset = math.max(1.8, (extents.Y * 0.5) + 0.8)
-	createPetTagBillboard(root, species, variant, level, rarityColor, tagYOffset)
+	createPetTagBillboard(root, species, variant, level, rarityColor, tagYOffset, ownerDisplayName)
 
 	return model, root
 end

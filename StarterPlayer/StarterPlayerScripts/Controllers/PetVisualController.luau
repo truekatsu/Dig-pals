@@ -1,25 +1,34 @@
 --!strict
--- Client-side smooth visual pet followers, hovering formations, attack dashes, and effects (Step 9)
--- PRD: "Visual (client): pet mengikuti pemain dalam Range, bergerak ke gundukan target dengan kecepatan 6 + 2 x Speed studs/detik. Tanpa fisika, tanpa timing."
+-- Client-side smooth visual pet followers, formations, attack dashes, effects, and base roamers (Multi-Player)
+-- Displays equipped and base pets for both the local player and all other players in the server.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Util"):WaitForChild("Types"))
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
 local PetsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Pets"))
-local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rarity"))
 local PetModelBuilder = require(Shared:WaitForChild("PetModelBuilder"))
 
 local LocalPlayer = Players.LocalPlayer
 
 local PetVisualController = {}
 
+export type PetSummary = {
+	Guid: string,
+	Species: string,
+	Variant: Types.PetVariantName,
+	Level: number,
+}
+
 type VisualPetState = {
 	Guid: string,
+	OwnerUserId: number,
+	OwnerPlayer: Player,
 	Species: string,
 	Variant: Types.PetVariantName,
 	Level: number,
@@ -39,6 +48,8 @@ type VisualPetState = {
 
 type BasePetVisualState = {
 	Guid: string,
+	OwnerUserId: number,
+	OwnerPlayer: Player,
 	Species: string,
 	Variant: Types.PetVariantName,
 	Level: number,
@@ -52,34 +63,6 @@ type BasePetVisualState = {
 	GroundPart: BasePart?,
 	AnimTracks: { [string]: AnimationTrack }?,
 	CurrentAnim: string?,
-}
-
-local SPECIES_EMOJIS: { [string]: string } = {
-	Dog = utf8.char(0x1F436),
-	Cat = utf8.char(0x1F431),
-	Mole = utf8.char(0x1F439),
-	Bunny = utf8.char(0x1F430),
-	Hamster = utf8.char(0x1F439),
-	Chick = utf8.char(0x1F424),
-	Fox = utf8.char(0x1F98A),
-	Badger = utf8.char(0x1F9A1),
-	Hedgehog = utf8.char(0x1F994),
-	Ferret = utf8.char(0x1F9A6),
-	Raccoon = utf8.char(0x1F99D),
-	Turtle = utf8.char(0x1F422),
-	Beetle = utf8.char(0x1FAB2),
-	Piglet = utf8.char(0x1F437),
-	Armadillo = utf8.char(0x1F6E1),
-	Pangolin = utf8.char(0x1F98E),
-	Boar = utf8.char(0x1F417),
-	Owl = utf8.char(0x1F989),
-	Chameleon = utf8.char(0x1F98E),
-	CrystalFox = utf8.char(0x1F48E),
-	MagmaHound = utf8.char(0x1F525),
-	EarthGolem = utf8.char(0x1F5FF),
-	RuneBear = utf8.char(0x1F43B),
-	TerraDragon = utf8.char(0x1F432),
-	CelestialGriffin = utf8.char(0x1F985),
 }
 
 local FORMATION_OFFSETS = {
@@ -99,151 +82,116 @@ local FORMATION_OFFSETS = {
 
 local petVisualFolder: Folder? = nil
 local basePetVisualFolder: Folder? = nil
+
+-- Visual state tables (keyed by petGuid)
 local activeVisuals: { [string]: VisualPetState } = {}
 local activeBaseVisuals: { [string]: BasePetVisualState } = {}
-local ownedPets: { [string]: Types.PetInstance } = {}
-local equippedPetGuids: { string } = {}
-local basePetGuids: { string } = {}
+
+-- Per-player tracking of active GUIDs
+local playerEquippedGuids: { [number]: { string } } = {}
+local playerBaseGuids: { [number]: { string } } = {}
+
+-- Local player cache from StateSync
+local localOwnedPets: { [string]: Types.PetInstance } = {}
+local localEquippedGuids: { string } = {}
+local localBaseGuids: { string } = {}
+
 local started = false
 
-local function getRarityColor(rarityName: string): Color3
-	local info = (RarityConfig.ById :: any)[rarityName]
-	return if info then info.Color else RarityConfig.ById.Common.Color
+-- Safe JSON parsing for public pet attributes
+local function parsePublicPetsAttribute(player: Player, attributeName: string): { PetSummary }
+	local raw = player:GetAttribute(attributeName)
+	if type(raw) ~= "string" or #raw == 0 then
+		return {}
+	end
+	local ok, list = pcall(function()
+		return HttpService:JSONDecode(raw)
+	end)
+	if ok and type(list) == "table" then
+		return list
+	end
+	return {}
 end
 
--- Create procedural stylized pet model for local visual display
-local function createProceduralPetModel(
-	guid: string,
-	species: string,
-	variant: Types.PetVariantName,
-	level: number,
-	spawnPos: Vector3
-): (Model, BasePart)
-	local model = Instance.new("Model")
-	model.Name = "PetVisual_" .. guid
+local function getPlayerEquippedSummaries(player: Player): { PetSummary }
+	if player == LocalPlayer and #localEquippedGuids > 0 then
+		local list: { PetSummary } = {}
+		for _, guid in ipairs(localEquippedGuids) do
+			local p = localOwnedPets[guid]
+			if p then
+				table.insert(list, {
+					Guid = guid,
+					Species = p.Species,
+					Variant = p.Variant or "Normal",
+					Level = p.Level or 1,
+				})
+			end
+		end
+		if #list > 0 then
+			return list
+		end
+	end
+	return parsePublicPetsAttribute(player, "PublicEquippedPets")
+end
 
-	local root = Instance.new("Part")
-	root.Name = "RootPart"
-	root.Size = Vector3.new(1.6, 1.6, 1.6)
-	root.Position = spawnPos
-	root.Anchored = true
-	root.CanCollide = false
-	root.CanTouch = false
-	root.CanQuery = false
-	root.CastShadow = true
-	root.Material = Enum.Material.SmoothPlastic
+local function getPlayerBaseSummaries(player: Player): { PetSummary }
+	if player == LocalPlayer and #localBaseGuids > 0 then
+		local list: { PetSummary } = {}
+		for _, guid in ipairs(localBaseGuids) do
+			local p = localOwnedPets[guid]
+			if p then
+				table.insert(list, {
+					Guid = guid,
+					Species = p.Species,
+					Variant = p.Variant or "Normal",
+					Level = p.Level or 1,
+				})
+			end
+		end
+		if #list > 0 then
+			return list
+		end
+	end
+	return parsePublicPetsAttribute(player, "PublicBasePets")
+end
 
-	local speciesCfg = PetsConfig.Species[species]
-	local rarityColor = if speciesCfg then getRarityColor(speciesCfg.Rarity) else Color3.fromRGB(220, 220, 220)
-
-	if variant == "Golden" then
-		root.Color = Color3.fromRGB(255, 215, 60)
-		root.Material = Enum.Material.Neon
-	elseif variant == "Shiny" then
-		root.Color = Color3.fromRGB(180, 120, 255)
-		root.Material = Enum.Material.Neon
-	else
-		root.Color = rarityColor
+local function getPlayerPlotGround(player: Player): BasePart?
+	local assignedPlot = player:GetAttribute("AssignedPlot")
+	local basePlots = workspace:FindFirstChild("BasePlots")
+	if not basePlots then
+		return nil
 	end
 
-	root.Parent = model
-	model.PrimaryPart = root
-
-	-- Add inner cute eyes/face mesh or accent
-	local faceAccent = Instance.new("Part")
-	faceAccent.Name = "FaceAccent"
-	faceAccent.Size = Vector3.new(1.2, 0.6, 0.2)
-	faceAccent.CFrame = root.CFrame * CFrame.new(0, 0.1, -0.81)
-	faceAccent.Color = Color3.fromRGB(28, 32, 42)
-	faceAccent.Material = Enum.Material.SmoothPlastic
-	faceAccent.Anchored = true
-	faceAccent.CanCollide = false
-	faceAccent.CanTouch = false
-	faceAccent.CanQuery = false
-	faceAccent.Parent = model
-
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = root
-	weld.Part1 = faceAccent
-	weld.Parent = root
-
-	-- Variant particle aura
-	if variant == "Golden" then
-		local attachment = Instance.new("Attachment")
-		attachment.Parent = root
-
-		local emitter = Instance.new("ParticleEmitter")
-		emitter.Texture = "rbxassetid://1084991219" -- sparkle/star
-		emitter.Rate = 6
-		emitter.Lifetime = NumberRange.new(0.6, 1.2)
-		emitter.Speed = NumberRange.new(0.5, 1.5)
-		emitter.Color = ColorSequence.new(Color3.fromRGB(255, 230, 120))
-		emitter.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.4),
-			NumberSequenceKeypoint.new(1, 0),
-		})
-		emitter.Parent = attachment
-	elseif variant == "Shiny" then
-		local attachment = Instance.new("Attachment")
-		attachment.Parent = root
-
-		local emitter = Instance.new("ParticleEmitter")
-		emitter.Texture = "rbxassetid://1084991219"
-		emitter.Rate = 9
-		emitter.Lifetime = NumberRange.new(0.8, 1.4)
-		emitter.Speed = NumberRange.new(0.8, 2.0)
-		emitter.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 120, 255)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 220, 255)),
-		})
-		emitter.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.5),
-			NumberSequenceKeypoint.new(1, 0),
-		})
-		emitter.Parent = attachment
+	if type(assignedPlot) == "string" and #assignedPlot > 0 then
+		local plotFolder = basePlots:FindFirstChild(assignedPlot)
+		if plotFolder and plotFolder:IsA("Folder") then
+			for _, child in ipairs(plotFolder:GetChildren()) do
+				if child:IsA("BasePart") and string.find(child.Name, "_Ground$") then
+					return child
+				end
+			end
+		end
 	end
 
-	-- Billboard label
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "PetTag"
-	billboard.Size = UDim2.fromOffset(130, 48)
-	billboard.StudsOffset = Vector3.new(0, 1.8, 0)
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 64
-	billboard.Parent = root
-
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 12
-	nameLabel.TextColor3 = rarityColor
-	nameLabel.TextStrokeTransparency = 0.4
-	nameLabel.TextStrokeColor3 = Color3.fromRGB(10, 12, 16)
-
-	local emoji = SPECIES_EMOJIS[species] or "PET"
-	local variantPrefix = if variant == "Golden" then "[GOLDEN] " elseif variant == "Shiny" then "[SHINY] " else ""
-	nameLabel.Text = string.format("%s%s %s", variantPrefix, emoji, if speciesCfg then speciesCfg.DisplayName else species)
-	nameLabel.Parent = billboard
-
-	local lvLabel = Instance.new("TextLabel")
-	lvLabel.Position = UDim2.new(0, 0, 0.5, 0)
-	lvLabel.Size = UDim2.new(1, 0, 0.5, 0)
-	lvLabel.BackgroundTransparency = 1
-	lvLabel.Font = Enum.Font.GothamMedium
-	lvLabel.TextSize = 10
-	lvLabel.TextColor3 = Color3.fromRGB(240, 244, 250)
-	lvLabel.TextStrokeTransparency = 0.5
-	lvLabel.Text = "Lv." .. tostring(level)
-	lvLabel.Parent = billboard
-
-	if petVisualFolder then
-		model.Parent = petVisualFolder
-	else
-		model.Parent = workspace
+	-- Fallback: check plots with OwnerUserId == player.UserId
+	for _, folder in ipairs(basePlots:GetChildren()) do
+		if folder:IsA("Folder") and folder:GetAttribute("OwnerUserId") == player.UserId then
+			for _, child in ipairs(folder:GetChildren()) do
+				if child:IsA("BasePart") and string.find(child.Name, "_Ground$") then
+					return child
+				end
+			end
+		end
 	end
 
-	return model, root
+	return nil
+end
+
+local function getOwnerDisplayName(player: Player): string?
+	if player == LocalPlayer then
+		return nil
+	end
+	return player.DisplayName or player.Name
 end
 
 local function setupPetAnimations(model: Model): { [string]: AnimationTrack }?
@@ -298,56 +246,83 @@ local function setPetAnimation(visual: { AnimTracks: { [string]: AnimationTrack 
 	visual.CurrentAnim = targetAnim
 end
 
--- Root-to-foot distance is model-specific (imported pets can have a pivot at their feet).
 local function getGroundOffset(model: Model, root: BasePart): number
-	local bottom=math.huge
-	for _,part in model:GetDescendants() do
-		if part:IsA("BasePart") and part.Transparency<1 then
-			for _,x in {-1,1} do for _,y in {-1,1} do for _,z in {-1,1} do
-				local corner=part.CFrame:PointToWorldSpace(part.Size*Vector3.new(x,y,z)*.5)
-				bottom=math.min(bottom,corner.Y)
-			end end end
+	local bottom = math.huge
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") and part.Transparency < 1 then
+			for _, x in {-1, 1} do
+				for _, y in {-1, 1} do
+					for _, z in {-1, 1} do
+						local corner = part.CFrame:PointToWorldSpace(part.Size * Vector3.new(x, y, z) * 0.5)
+						bottom = math.min(bottom, corner.Y)
+					end
+				end
+			end
 		end
 	end
-	return if bottom==math.huge then root.Size.Y*.5 else root.Position.Y-bottom
+	return if bottom == math.huge then root.Size.Y * 0.5 else root.Position.Y - bottom
 end
 
 local function groundPosition(position: Vector3, offset: number): Vector3
-	local ignore: {Instance}={}
-	for _,player in Players:GetPlayers() do if player.Character then table.insert(ignore,player.Character) end end
-	for _,name in {"ClientPetVisuals","ClientBasePetVisuals","ClientMounds","ActiveMounds"} do
-		local folder=workspace:FindFirstChild(name) if folder then table.insert(ignore,folder) end
+	local ignore: { Instance } = {}
+	for _, player in Players:GetPlayers() do
+		if player.Character then
+			table.insert(ignore, player.Character)
+		end
 	end
-	local params=RaycastParams.new()
-	params.FilterType=Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances=ignore
-	params.RespectCanCollide=true
-	local hit=workspace:Raycast(position+Vector3.new(0,12,0),Vector3.new(0,-120,0),params)
-	return if hit then Vector3.new(position.X,hit.Position.Y+offset+.03,position.Z) else position
+	for _, name in {"ClientPetVisuals", "ClientBasePetVisuals", "ClientMounds", "ActiveMounds"} do
+		local folder = workspace:FindFirstChild(name)
+		if folder then
+			table.insert(ignore, folder)
+		end
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+	params.RespectCanCollide = true
+	local hit = workspace:Raycast(position + Vector3.new(0, 12, 0), Vector3.new(0, -120, 0), params)
+	return if hit then Vector3.new(position.X, hit.Position.Y + offset + 0.03, position.Z) else position
 end
 
--- Synchronize active visual models with equipped pets list
-local function syncVisualPets()
-	local activeGuids: { [string]: boolean } = {}
+-- Synchronize equipped follower pets for a given player
+local function syncPlayerEquippedPets(player: Player, petSummaries: { PetSummary }?)
+	if not petSummaries then
+		petSummaries = getPlayerEquippedSummaries(player)
+	end
 
-	local character = LocalPlayer.Character
+	local userId = player.UserId
+	local character = player.Character
 	local rootPart = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local playerPos = if rootPart then rootPart.Position else Vector3.new(0, 5, 0)
 
-	for _, guid in equippedPetGuids do
+	-- If character is not present yet, wait for CharacterAdded
+	if not rootPart then
+		return
+	end
+
+	local newGuids: { string } = {}
+	local activeGuids: { [string]: boolean } = {}
+	local playerPos = rootPart.Position
+	local ownerName = getOwnerDisplayName(player)
+
+	for _, summary in ipairs(petSummaries) do
+		local guid = summary.Guid
+		table.insert(newGuids, guid)
 		activeGuids[guid] = true
-		local petData = ownedPets[guid]
-		if petData and not activeVisuals[guid] then
-			local speciesCfg = PetsConfig.Species[petData.Species]
+
+		local existing = activeVisuals[guid]
+		if not existing then
+			local speciesCfg = PetsConfig.Species[summary.Species]
 			local speed = if speciesCfg then speciesCfg.Speed else 2
 			local moveSpeed = PetsConfig.BaseMoveSpeedStuds + (PetsConfig.MoveSpeedPerStat * speed)
 
+			local spawnPos = playerPos + Vector3.new(math.random(-3, 3), 1, math.random(-3, 3))
 			local model, root = PetModelBuilder.BuildPet(
 				guid,
-				petData.Species,
-				petData.Variant,
-				petData.Level,
-				playerPos + Vector3.new(math.random(-3, 3), 1, math.random(-3, 3))
+				summary.Species,
+				summary.Variant,
+				summary.Level,
+				spawnPos,
+				ownerName
 			)
 
 			if petVisualFolder then
@@ -355,15 +330,17 @@ local function syncVisualPets()
 			end
 
 			local animTracks = setupPetAnimations(model)
-			local groundOffset=getGroundOffset(model,root)
-			local grounded=groundPosition(root.Position,groundOffset)
-			root.CFrame=CFrame.new(grounded)*root.CFrame.Rotation
+			local groundOffset = getGroundOffset(model, root)
+			local grounded = groundPosition(root.Position, groundOffset)
+			root.CFrame = CFrame.new(grounded) * root.CFrame.Rotation
 
 			activeVisuals[guid] = {
 				Guid = guid,
-				Species = petData.Species,
-				Variant = petData.Variant,
-				Level = petData.Level,
+				OwnerUserId = userId,
+				OwnerPlayer = player,
+				Species = summary.Species,
+				Variant = summary.Variant,
+				Level = summary.Level,
 				Speed = speed,
 				MoveSpeed = moveSpeed,
 				GroundOffset = groundOffset,
@@ -381,64 +358,47 @@ local function syncVisualPets()
 	end
 
 	-- Remove unequipped
-	for guid, visual in pairs(activeVisuals) do
-		if not activeGuids[guid] then
-			if visual.AnimTracks then
-				for _, track in pairs(visual.AnimTracks) do
-					track:Stop(0)
+	local oldGuids = playerEquippedGuids[userId] or {}
+	for _, oldGuid in ipairs(oldGuids) do
+		if not activeGuids[oldGuid] then
+			local visual = activeVisuals[oldGuid]
+			if visual then
+				if visual.AnimTracks then
+					for _, track in pairs(visual.AnimTracks) do
+						track:Stop(0)
+					end
 				end
+				if visual.Model then
+					visual.Model:Destroy()
+				end
+				activeVisuals[oldGuid] = nil
 			end
-			if visual.Model then
-				visual.Model:Destroy()
-			end
-			activeVisuals[guid] = nil
 		end
 	end
+
+	playerEquippedGuids[userId] = newGuids
 end
 
--- Helper: Find assigned base plot ground for local player
-local function getLocalPlotGround(): BasePart?
-	local assignedPlot = LocalPlayer:GetAttribute("AssignedPlot")
-	local basePlots = workspace:FindFirstChild("BasePlots")
-	if not basePlots then
-		return nil
+-- Synchronize base roaming pets for a given player
+local function syncPlayerBasePets(player: Player, petSummaries: { PetSummary }?)
+	if not petSummaries then
+		petSummaries = getPlayerBaseSummaries(player)
 	end
 
-	if type(assignedPlot) == "string" and #assignedPlot > 0 then
-		local plotFolder = basePlots:FindFirstChild(assignedPlot)
-		if plotFolder and plotFolder:IsA("Folder") then
-			for _, child in ipairs(plotFolder:GetChildren()) do
-				if child:IsA("BasePart") and string.find(child.Name, "_Ground$") then
-					return child
-				end
-			end
-		end
-	end
-
-	-- Fallback: check plots with OwnerUserId == LocalPlayer.UserId
-	for _, folder in ipairs(basePlots:GetChildren()) do
-		if folder:IsA("Folder") and folder:GetAttribute("OwnerUserId") == LocalPlayer.UserId then
-			for _, child in ipairs(folder:GetChildren()) do
-				if child:IsA("BasePart") and string.find(child.Name, "_Ground$") then
-					return child
-				end
-			end
-		end
-	end
-
-	return nil
-end
-
--- Synchronize active base roaming pets
-local function syncBasePets()
+	local userId = player.UserId
+	local newGuids: { string } = {}
 	local activeGuids: { [string]: boolean } = {}
-	local ground = getLocalPlotGround()
+	local ground = getPlayerPlotGround(player)
+	local ownerName = getOwnerDisplayName(player)
 
-	for _, guid in ipairs(basePetGuids) do
+	for _, summary in ipairs(petSummaries) do
+		local guid = summary.Guid
+		table.insert(newGuids, guid)
 		activeGuids[guid] = true
-		local petData = ownedPets[guid]
-		if petData and not activeBaseVisuals[guid] then
-			local speciesCfg = PetsConfig.Species[petData.Species]
+
+		local existing = activeBaseVisuals[guid]
+		if not existing then
+			local speciesCfg = PetsConfig.Species[summary.Species]
 			local speed = if speciesCfg then speciesCfg.Speed else 2
 			local moveSpeed = PetsConfig.BaseMoveSpeedStuds + (PetsConfig.MoveSpeedPerStat * speed)
 
@@ -453,10 +413,11 @@ local function syncBasePets()
 
 			local model, root = PetModelBuilder.BuildPet(
 				"Base_" .. guid,
-				petData.Species,
-				petData.Variant,
-				petData.Level,
-				spawnPos
+				summary.Species,
+				summary.Variant,
+				summary.Level,
+				spawnPos,
+				ownerName
 			)
 
 			if basePetVisualFolder then
@@ -467,9 +428,11 @@ local function syncBasePets()
 
 			activeBaseVisuals[guid] = {
 				Guid = guid,
-				Species = petData.Species,
-				Variant = petData.Variant,
-				Level = petData.Level,
+				OwnerUserId = userId,
+				OwnerPlayer = player,
+				Species = summary.Species,
+				Variant = summary.Variant,
+				Level = summary.Level,
 				Speed = speed,
 				MoveSpeed = moveSpeed,
 				Model = model,
@@ -481,26 +444,125 @@ local function syncBasePets()
 				AnimTracks = animTracks,
 				CurrentAnim = if animTracks and animTracks.Idle then "Idle" else nil,
 			}
+		else
+			if ground and (not existing.GroundPart or existing.GroundPart ~= ground) then
+				existing.GroundPart = ground
+			end
 		end
 	end
 
 	-- Remove unassigned base pets
-	for guid, visual in pairs(activeBaseVisuals) do
-		if not activeGuids[guid] then
-			if visual.AnimTracks then
-				for _, track in pairs(visual.AnimTracks) do
-					track:Stop(0)
+	local oldGuids = playerBaseGuids[userId] or {}
+	for _, oldGuid in ipairs(oldGuids) do
+		if not activeGuids[oldGuid] then
+			local visual = activeBaseVisuals[oldGuid]
+			if visual then
+				if visual.AnimTracks then
+					for _, track in pairs(visual.AnimTracks) do
+						track:Stop(0)
+					end
+				end
+				if visual.Model then
+					visual.Model:Destroy()
+				end
+				activeBaseVisuals[oldGuid] = nil
+			end
+		end
+	end
+
+	playerBaseGuids[userId] = newGuids
+end
+
+local function setupPlayer(player: Player)
+	local userId = player.UserId
+
+	player.CharacterAdded:Connect(function(char)
+		local hrp = char:WaitForChild("HumanoidRootPart", 5) :: BasePart?
+		if hrp then
+			syncPlayerEquippedPets(player)
+		end
+	end)
+
+	player.CharacterRemoving:Connect(function()
+		local guids = playerEquippedGuids[userId]
+		if guids then
+			for _, guid in ipairs(guids) do
+				local visual = activeVisuals[guid]
+				if visual then
+					if visual.AnimTracks then
+						for _, track in pairs(visual.AnimTracks) do
+							track:Stop(0)
+						end
+					end
+					if visual.Model then
+						visual.Model:Destroy()
+					end
+					activeVisuals[guid] = nil
 				end
 			end
-			if visual.Model then
-				visual.Model:Destroy()
-			end
-			activeBaseVisuals[guid] = nil
 		end
+	end)
+
+	player:GetAttributeChangedSignal("PublicEquippedPets"):Connect(function()
+		syncPlayerEquippedPets(player)
+	end)
+
+	player:GetAttributeChangedSignal("PublicBasePets"):Connect(function()
+		syncPlayerBasePets(player)
+	end)
+
+	player:GetAttributeChangedSignal("AssignedPlot"):Connect(function()
+		syncPlayerBasePets(player)
+	end)
+
+	task.spawn(function()
+		syncPlayerEquippedPets(player)
+		syncPlayerBasePets(player)
+	end)
+end
+
+local function cleanupPlayer(player: Player)
+	local userId = player.UserId
+
+	local eqGuids = playerEquippedGuids[userId]
+	if eqGuids then
+		for _, guid in ipairs(eqGuids) do
+			local visual = activeVisuals[guid]
+			if visual then
+				if visual.AnimTracks then
+					for _, track in pairs(visual.AnimTracks) do
+						track:Stop(0)
+					end
+				end
+				if visual.Model then
+					visual.Model:Destroy()
+				end
+				activeVisuals[guid] = nil
+			end
+		end
+		playerEquippedGuids[userId] = nil
+	end
+
+	local bGuids = playerBaseGuids[userId]
+	if bGuids then
+		for _, guid in ipairs(bGuids) do
+			local visual = activeBaseVisuals[guid]
+			if visual then
+				if visual.AnimTracks then
+					for _, track in pairs(visual.AnimTracks) do
+						track:Stop(0)
+					end
+				end
+				if visual.Model then
+					visual.Model:Destroy()
+				end
+				activeBaseVisuals[guid] = nil
+			end
+		end
+		playerBaseGuids[userId] = nil
 	end
 end
 
--- Play damage hit effect at mound position
 local function spawnHitEffect(pos: Vector3, damage: number)
 	local part = Instance.new("Part")
 	part.Size = Vector3.new(0.5, 0.5, 0.5)
@@ -550,17 +612,17 @@ function PetVisualController.ApplySnapshot(payload: any)
 		return
 	end
 	if type(payload.Pets) == "table" then
-		ownedPets = payload.Pets
+		localOwnedPets = payload.Pets
 	end
 	if type(payload.EquippedPets) == "table" then
-		equippedPetGuids = payload.EquippedPets
+		localEquippedGuids = payload.EquippedPets
 	end
 	if type(payload.BasePets) == "table" then
-		basePetGuids = payload.BasePets
+		localBaseGuids = payload.BasePets
 	end
 
-	syncVisualPets()
-	syncBasePets()
+	syncPlayerEquippedPets(LocalPlayer)
+	syncPlayerBasePets(LocalPlayer)
 end
 
 function PetVisualController.Start()
@@ -585,12 +647,12 @@ function PetVisualController.Start()
 	end
 	basePetVisualFolder = baseFolder :: Folder
 
-	-- Listen for StateSync
+	-- Listen for local player's StateSync
 	Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(payload: any)
 		PetVisualController.ApplySnapshot(payload)
 	end)
 
-	-- Listen for PetAttackVisual
+	-- Listen for PetAttackVisual (broadcast to all clients)
 	Remotes.GetEvent("PetAttackVisual").OnClientEvent:Connect(function(petGuid: string, moundId: string, damage: number)
 		local visual = activeVisuals[petGuid]
 		if not visual then
@@ -605,10 +667,14 @@ function PetVisualController.Start()
 
 		if moundPos then
 			visual.IsAttacking = true
-			local away=Vector3.new(visual.CurrentPos.X-moundPos.X,0,visual.CurrentPos.Z-moundPos.Z)
-			if away.Magnitude<.01 then away=Vector3.new(1,0,0) end
-			local moundRadius=if moundModel and moundModel:IsA("Model") and moundModel.PrimaryPart then math.max(moundModel.PrimaryPart.Size.X,moundModel.PrimaryPart.Size.Z)*.5 else 2
-			visual.AttackTargetPos = moundPos+away.Unit*(moundRadius+1.1)
+			local away = Vector3.new(visual.CurrentPos.X - moundPos.X, 0, visual.CurrentPos.Z - moundPos.Z)
+			if away.Magnitude < 0.01 then
+				away = Vector3.new(1, 0, 0)
+			end
+			local moundRadius = if moundModel and moundModel:IsA("Model") and moundModel.PrimaryPart
+				then math.max(moundModel.PrimaryPart.Size.X, moundModel.PrimaryPart.Size.Z) * 0.5
+				else 2
+			visual.AttackTargetPos = moundPos + away.Unit * (moundRadius + 1.1)
 			visual.AttackStartedAt = os.clock()
 			spawnHitEffect(moundPos, damage)
 
@@ -621,98 +687,120 @@ function PetVisualController.Start()
 		end
 	end)
 
+	-- Setup player tracking for all current and future players
+	for _, player in ipairs(Players:GetPlayers()) do
+		setupPlayer(player)
+	end
+	Players.PlayerAdded:Connect(setupPlayer)
+	Players.PlayerRemoving:Connect(cleanupPlayer)
+
 	-- Frame movement loop (RenderStepped)
 	RunService.RenderStepped:Connect(function(dt: number)
-		local character = LocalPlayer.Character
-		if not character then
-			return
-		end
-
-		local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if not rootPart then
-			return
-		end
-
-		local charCFrame = rootPart.CFrame
-		local totalEquipped = math.clamp(#equippedPetGuids, 1, 3)
-		local offsets = FORMATION_OFFSETS[totalEquipped] or FORMATION_OFFSETS[1]
-
 		local now = os.clock()
 
-		for idx, guid in ipairs(equippedPetGuids) do
-			local visual = activeVisuals[guid]
-			if visual and visual.RootPart and visual.RootPart.Parent then
-				local targetPos: Vector3
-				local targetLook: Vector3
-				local species=PetsConfig.Species[visual.Species]
-				local leash=if species then species.Range else 14
-				-- Return immediately when the player moves or teleports beyond this pet's Range.
-				local fromPlayer=visual.CurrentPos-rootPart.Position
-				if fromPlayer.Magnitude>leash then
-					visual.CurrentPos=rootPart.Position+fromPlayer.Unit*leash
-					visual.IsAttacking=false
-					visual.AttackTargetPos=nil
-				end
+		-- 1. Equipped pets follow their respective player
+		for userId, guids in pairs(playerEquippedGuids) do
+			local player = Players:GetPlayerByUserId(userId)
+			if not player then
+				continue
+			end
 
-				if visual.IsAttacking and visual.AttackTargetPos then
-					-- Dash towards mound attack target
-					targetPos = visual.AttackTargetPos
-					targetLook = (targetPos - visual.CurrentPos).Unit
-				else
-					-- Formation following avatar
-					local offset = offsets[idx] or Vector3.new(2.5, 0.8, 2.0)
-					local formationPos = (charCFrame * CFrame.new(offset.X,0,offset.Z)).Position
-					targetPos = formationPos
-					targetLook = charCFrame.LookVector
-				end
+			local character = player.Character
+			if not character then
+				continue
+			end
 
-				-- Speed: 6 + 2 x Speed studs/sec
-				local targetOffset=targetPos-rootPart.Position
-				if targetOffset.Magnitude>leash then targetPos=rootPart.Position+targetOffset.Unit*leash end
-				targetPos=groundPosition(targetPos,visual.GroundOffset)
-				local maxMove = visual.MoveSpeed * dt
-				local diff = targetPos - visual.CurrentPos
-				local dist = diff.Magnitude
+			local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not rootPart then
+				continue
+			end
 
-				local nextPos = if dist <= maxMove then targetPos else visual.CurrentPos + (diff.Unit * maxMove)
-				local leashOffset=nextPos-rootPart.Position
-				if leashOffset.Magnitude>leash then nextPos=rootPart.Position+leashOffset.Unit*leash end
-				nextPos=groundPosition(nextPos,visual.GroundOffset)
-				visual.CurrentPos = nextPos
+			local charCFrame = rootPart.CFrame
+			local totalEquipped = math.clamp(#guids, 1, 3)
+			local offsets = FORMATION_OFFSETS[totalEquipped] or FORMATION_OFFSETS[1]
 
-				-- Animation state
-				if visual.AnimTracks then
-					if visual.IsAttacking then
-						setPetAnimation(visual, "Digging")
-					elseif dist > 0.15 then
-						setPetAnimation(visual, "Walk")
+			for idx, guid in ipairs(guids) do
+				local visual = activeVisuals[guid]
+				if visual and visual.RootPart and visual.RootPart.Parent then
+					local targetPos: Vector3
+					local targetLook: Vector3
+					local species = PetsConfig.Species[visual.Species]
+					local leash = if species then species.Range else 14
+
+					-- Return immediately when player moves or teleports beyond leash
+					local fromPlayer = visual.CurrentPos - rootPart.Position
+					if fromPlayer.Magnitude > leash then
+						visual.CurrentPos = rootPart.Position + fromPlayer.Unit * leash
+						visual.IsAttacking = false
+						visual.AttackTargetPos = nil
+					end
+
+					if visual.IsAttacking and visual.AttackTargetPos then
+						-- Dash towards mound attack target
+						targetPos = visual.AttackTargetPos
+						targetLook = (targetPos - visual.CurrentPos).Unit
 					else
-						setPetAnimation(visual, "Idle")
+						-- Formation following avatar
+						local offset = offsets[idx] or Vector3.new(2.5, 0.8, 2.0)
+						local formationPos = (charCFrame * CFrame.new(offset.X, 0, offset.Z)).Position
+						targetPos = formationPos
+						targetLook = charCFrame.LookVector
 					end
-				end
 
-				-- Smooth orientation
-				local lookDelta=Vector3.new(targetPos.X-visual.CurrentPos.X,0,targetPos.Z-visual.CurrentPos.Z)
-				targetLook=Vector3.new(targetLook.X,0,targetLook.Z)
-				local lookDir = if lookDelta.Magnitude > 0.05 then lookDelta.Unit else targetLook
-				if lookDir.Magnitude > 0.01 then
-					local cf = CFrame.lookAt(nextPos, nextPos + lookDir)
-					visual.RootPart.CFrame = cf
-					local face = visual.Model:FindFirstChild("FaceAccent") :: BasePart?
-					if face then
-						face.CFrame = cf * CFrame.new(0, 0.1, -0.81)
+					local targetOffset = targetPos - rootPart.Position
+					if targetOffset.Magnitude > leash then
+						targetPos = rootPart.Position + targetOffset.Unit * leash
 					end
-				else
-					visual.RootPart.Position = nextPos
+					targetPos = groundPosition(targetPos, visual.GroundOffset)
+					local maxMove = visual.MoveSpeed * dt
+					local diff = targetPos - visual.CurrentPos
+					local dist = diff.Magnitude
+
+					local nextPos = if dist <= maxMove then targetPos else visual.CurrentPos + (diff.Unit * maxMove)
+					local leashOffset = nextPos - rootPart.Position
+					if leashOffset.Magnitude > leash then
+						nextPos = rootPart.Position + leashOffset.Unit * leash
+					end
+					nextPos = groundPosition(nextPos, visual.GroundOffset)
+					visual.CurrentPos = nextPos
+
+					-- Animation state
+					if visual.AnimTracks then
+						if visual.IsAttacking then
+							setPetAnimation(visual, "Digging")
+						elseif dist > 0.15 then
+							setPetAnimation(visual, "Walk")
+						else
+							setPetAnimation(visual, "Idle")
+						end
+					end
+
+					-- Smooth orientation
+					local lookDelta = Vector3.new(targetPos.X - visual.CurrentPos.X, 0, targetPos.Z - visual.CurrentPos.Z)
+					targetLook = Vector3.new(targetLook.X, 0, targetLook.Z)
+					local lookDir = if lookDelta.Magnitude > 0.05 then lookDelta.Unit else targetLook
+					if lookDir.Magnitude > 0.01 then
+						local cf = CFrame.lookAt(nextPos, nextPos + lookDir)
+						visual.RootPart.CFrame = cf
+						local face = visual.Model:FindFirstChild("FaceAccent") :: BasePart?
+						if face then
+							face.CFrame = cf * CFrame.new(0, 0.1, -0.81)
+						end
+					else
+						visual.RootPart.Position = nextPos
+					end
 				end
 			end
 		end
 
-		-- Base pets roaming in plot
+		-- 2. Base pets roaming in their respective player's plot ground
 		for _, visual in pairs(activeBaseVisuals) do
 			if visual and visual.RootPart and visual.RootPart.Parent then
-				local ground = visual.GroundPart or getLocalPlotGround()
-				visual.GroundPart = ground
+				local ground = visual.GroundPart
+				if not ground or not ground.Parent then
+					ground = getPlayerPlotGround(visual.OwnerPlayer)
+					visual.GroundPart = ground
+				end
 
 				if ground and (now >= visual.NextMoveTime or (visual.TargetPos - visual.CurrentPos).Magnitude < 0.6) then
 					local halfW = math.max(4, (ground.Size.X / 2) - 6)

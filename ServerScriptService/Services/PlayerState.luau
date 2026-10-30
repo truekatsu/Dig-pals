@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TextChatService = game:GetService("TextChatService")
+local HttpService = game:GetService("HttpService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Util"):WaitForChild("Types"))
@@ -50,6 +51,39 @@ function PlayerState.SyncAttributes(player: Player, profile: Types.PlayerProfile
 		player:SetAttribute("TutorialStep", profile.Tutorial.Step or 1)
 		player:SetAttribute("TutorialDone", profile.Tutorial.Done == true)
 	end
+
+	-- Replicate public summaries of equipped and base pets for other players to see
+	local publicEquipped = {}
+	if type(profile.EquippedPets) == "table" and type(profile.Pets) == "table" then
+		for _, guid in ipairs(profile.EquippedPets) do
+			local p = profile.Pets[guid]
+			if p then
+				table.insert(publicEquipped, {
+					Guid = guid,
+					Species = p.Species,
+					Variant = p.Variant or "Normal",
+					Level = p.Level or 1,
+				})
+			end
+		end
+	end
+	player:SetAttribute("PublicEquippedPets", HttpService:JSONEncode(publicEquipped))
+
+	local publicBase = {}
+	if type(profile.BasePets) == "table" and type(profile.Pets) == "table" then
+		for _, guid in ipairs(profile.BasePets) do
+			local p = profile.Pets[guid]
+			if p then
+				table.insert(publicBase, {
+					Guid = guid,
+					Species = p.Species,
+					Variant = p.Variant or "Normal",
+					Level = p.Level or 1,
+				})
+			end
+		end
+	end
+	player:SetAttribute("PublicBasePets", HttpService:JSONEncode(publicBase))
 end
 
 local function notifyListeners(player: Player, profile: Types.PlayerProfile)

@@ -244,6 +244,7 @@ function PassiveIncomeService.Start()
 			player:SetAttribute("Coins", profile.Coins)
 
 			-- Sync updated state
+			PlayerState.SyncAttributes(player, profile)
 			ShovelInventoryService.SendStateSync(player)
 
 			local QuestService = require(script.Parent:WaitForChild("QuestService"))
