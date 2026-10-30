@@ -29,6 +29,9 @@ export type DropEntry = {
 	SellPrice: number,
 	AutoSold: boolean,
 	AutoSoldCoins: number,
+	Weight: number?,
+	WeightClass: string?,
+	ModelScale: number?,
 }
 
 export type MoundDropSummary = {
@@ -156,33 +159,65 @@ function DropService.RollSingleDrop(
 	local dropTypeRaw = Weighted.Pick(sizeConfig.DropTypeWeights, randomObj)
 	local dropType: Types.MoundDropType = if dropTypeRaw == "Egg" then "Egg" else "Item"
 
-	local adjustedRarityWeights = Weighted.ApplyLuck(sizeConfig.RarityWeights, clampedLuck)
-	local rarityRaw = Weighted.Pick(adjustedRarityWeights, randomObj)
-	local rarity: Types.RarityName = if RarityConfig.ById[rarityRaw :: Types.RarityName]
-		then (rarityRaw :: Types.RarityName)
-		else "Common"
-
 	if dropType == "Egg" then
-		local eggConfig = pickEggForRarity(rarity)
+		local eggWeights = sizeConfig.EggRarityWeights or {
+			Common = 85,
+			Uncommon = 15,
+			Rare = 0,
+			Epic = 0,
+			Legendary = 0,
+		}
+		local adjustedEggWeights = Weighted.ApplyLuck(eggWeights, clampedLuck)
+		local eggRarityRaw = Weighted.Pick(adjustedEggWeights, randomObj)
+		local eggRarity: Types.RarityName = if RarityConfig.ById[eggRarityRaw :: Types.RarityName]
+			then (eggRarityRaw :: Types.RarityName)
+			else "Common"
+
+		-- Absolute safeguard: regular mounds never drop Epic or Legendary eggs
+		if eggRarity == "Epic" or eggRarity == "Legendary" then
+			eggRarity = if (eggWeights.Rare or 0) > 0 then "Rare" else "Uncommon"
+		end
+
+		local eggConfig = pickEggForRarity(eggRarity)
 		return {
 			DropType = "Egg",
 			Id = eggConfig.Id,
 			DisplayName = eggConfig.DisplayName,
-			Rarity = rarity,
+			Rarity = eggRarity,
 			SellPrice = eggConfig.SellPrice,
 			AutoSold = false,
 			AutoSoldCoins = 0,
 		}
 	else
+		local adjustedRarityWeights = Weighted.ApplyLuck(sizeConfig.RarityWeights, clampedLuck)
+		local rarityRaw = Weighted.Pick(adjustedRarityWeights, randomObj)
+		local rarity: Types.RarityName = if RarityConfig.ById[rarityRaw :: Types.RarityName]
+			then (rarityRaw :: Types.RarityName)
+			else "Common"
+
 		local itemConfig = pickUniformItemInRarity(rarity, randomObj)
+		local weight = if ItemsConfig.RollWeight then ItemsConfig.RollWeight(itemConfig.Id, randomObj) else nil
+		local sellPrice = if ItemsConfig.GetSellPrice
+			then ItemsConfig.GetSellPrice(itemConfig.Id, weight)
+			else (itemConfig.SellPrice or 10)
+		local weightClass = if ItemsConfig.GetWeightClass and weight
+			then ItemsConfig.GetWeightClass(itemConfig.Id, weight)
+			else nil
+		local modelScale = if ItemsConfig.GetModelScale and weight
+			then ItemsConfig.GetModelScale(itemConfig.Id, weight)
+			else nil
+
 		return {
 			DropType = "Item",
 			Id = itemConfig.Id,
 			DisplayName = itemConfig.DisplayName,
 			Rarity = rarity,
-			SellPrice = itemConfig.SellPrice,
+			SellPrice = sellPrice,
 			AutoSold = false,
 			AutoSoldCoins = 0,
+			Weight = weight,
+			WeightClass = weightClass,
+			ModelScale = modelScale,
 		}
 	end
 end
@@ -265,7 +300,8 @@ function DropService.ProcessClearedMound(
 	local dropDescList: { string } = {}
 	for _, d in drops do
 		local autoSoldTag = if d.AutoSold then string.format(" [AutoSold +%d]", d.AutoSoldCoins) else ""
-		table.insert(dropDescList, string.format("%s:%s (%s)%s", d.DropType, d.Id, d.Rarity, autoSoldTag))
+		local weightTag = if d.Weight then string.format(" %.2fkg/%s", d.Weight, d.WeightClass or "Wajar") else ""
+		table.insert(dropDescList, string.format("%s:%s (%s%s)%s", d.DropType, d.Id, d.Rarity, weightTag, autoSoldTag))
 	end
 
 	print(

@@ -26,6 +26,13 @@ local Sizes: { [Types.MoundSizeName]: Types.MoundSizeConfig } = {
 			Egg = 15,
 			Item = 85,
 		},
+		EggRarityWeights = {
+			Common = 85,
+			Uncommon = 15,
+			Rare = 0,
+			Epic = 0,
+			Legendary = 0,
+		},
 		RarityWeights = {
 			Common = 70,
 			Uncommon = 20,
@@ -49,6 +56,13 @@ local Sizes: { [Types.MoundSizeName]: Types.MoundSizeConfig } = {
 			Egg = 25,
 			Item = 75,
 		},
+		EggRarityWeights = {
+			Common = 60,
+			Uncommon = 35,
+			Rare = 5,
+			Epic = 0,
+			Legendary = 0,
+		},
 		RarityWeights = {
 			Common = 50,
 			Uncommon = 30,
@@ -71,6 +85,13 @@ local Sizes: { [Types.MoundSizeName]: Types.MoundSizeConfig } = {
 		DropTypeWeights = {
 			Egg = 40,
 			Item = 60,
+		},
+		EggRarityWeights = {
+			Common = 30,
+			Uncommon = 50,
+			Rare = 20,
+			Epic = 0,
+			Legendary = 0,
 		},
 		RarityWeights = {
 			Common = 30,

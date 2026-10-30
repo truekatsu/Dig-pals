@@ -39,6 +39,7 @@ export type MoundSizeConfig = {
 	Scale: Vector3,
 	DropTypeWeights: { [string]: number },
 	RarityWeights: { [string]: number },
+	EggRarityWeights: { [string]: number }?,
 	Timing: TimingBarConfig,
 }
 
@@ -79,6 +80,9 @@ export type ItemConfig = {
 	DisplayName: string,
 	Rarity: RarityName,
 	SellPrice: number,
+	DefaultWeight: number?,
+	NormalMaxWeight: number?,
+	MaxWeight: number?,
 }
 
 export type BaseLevelConfig = {
@@ -130,6 +134,7 @@ export type PlayerProfile = {
 	BagLevel: number,
 	BaseLevel: number,
 	Items: { [string]: number },
+	ItemWeights: { [string]: { number } },
 	EggBag: { EggBagEntry },
 	Incubators: { [number]: IncubatorEntry },
 	Pets: { [string]: PetInstance },
