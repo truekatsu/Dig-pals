@@ -35,6 +35,7 @@ export type InventorySnapshot = {
 	BagLevel: number,
 	BaseLevel: number,
 	Items: { [string]: number },
+	ItemWeights: { [string]: { number } },
 	EggBag: { Types.EggBagEntry },
 	Incubators: { [number]: Types.IncubatorEntry },
 	Pets: { [string]: Types.PetInstance },
@@ -198,6 +199,14 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 	for k, v in profile.Items do
 		itemsCopy[k] = v
 	end
+	local itemWeightsCopy: { [string]: { number } } = {}
+	if type(profile.ItemWeights) == "table" then
+		for itemId, weights in profile.ItemWeights do
+			if type(itemId) == "string" and type(weights) == "table" then
+				itemWeightsCopy[itemId] = table.clone(weights)
+			end
+		end
+	end
 	local eggsCopy: { Types.EggBagEntry } = {}
 	for _, entry in profile.EggBag do
 		if type(entry) == "table" and type(entry.Id) == "string" then
@@ -257,6 +266,7 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 		BagLevel = profile.BagLevel,
 		BaseLevel = profile.BaseLevel,
 		Items = itemsCopy,
+		ItemWeights = itemWeightsCopy,
 		EggBag = eggsCopy,
 		Incubators = incubatorsCopy,
 		Pets = petsCopy,

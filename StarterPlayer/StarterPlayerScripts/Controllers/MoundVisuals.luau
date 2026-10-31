@@ -8,11 +8,17 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Util"):WaitForChild("Remotes"))
-local AssetIds = require(Shared:WaitForChild("AssetIds"))
 local MoundsConfig = require(Shared:WaitForChild("Config"):WaitForChild("Mounds"))
+local MoundAssets = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Mounds")
 
 local RAYCAST_DISTANCE = 500
 local LocalPlayer = Players.LocalPlayer
+local MOUND_TEMPLATE_NAMES: { [string]: string } = {
+	Small = "SmallMound",
+	Medium = "MediumMound",
+	Large = "LargeMound",
+	Shared = "LargeMound",
+}
 
 export type MoundVisualPayload = {
 	Id: string,
@@ -180,18 +186,10 @@ local function createBillboard(
 	local bg = Instance.new("Frame")
 	bg.Name = "Container"
 	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(29, 49, 55)
-	bg.BackgroundTransparency = 0.04
+	bg.BackgroundTransparency = 1
 	bg.BorderSizePixel = 0
 	bg.Parent = billboard
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = bg
-	local outline = Instance.new("UIStroke")
-	outline.Color = Color3.fromRGB(13, 27, 30)
-	outline.Thickness = 2
-	outline.Parent = bg
 	Instance.new("UIScale").Parent = bg
 	local heart = Instance.new("TextLabel")
 	heart.Name = "Heart"
@@ -214,6 +212,8 @@ local function createBillboard(
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextTruncate = Enum.TextTruncate.AtEnd
 	title.TextColor3 = if isShared then Color3.fromRGB(255, 220, 80) else Color3.fromRGB(255, 240, 200)
+	title.TextStrokeColor3 = Color3.fromRGB(16, 28, 31)
+	title.TextStrokeTransparency = 0.1
 	title.Text = titleText
 	title.Parent = bg
 
@@ -268,6 +268,126 @@ local function createBillboard(
 	return fill, hpLabel, billboard, trail
 end
 
+local function getVisualBounds(model: Model): (Vector3?, Vector3?)
+	local minimum = Vector3.new(math.huge, math.huge, math.huge)
+	local maximum = Vector3.new(-math.huge, -math.huge, -math.huge)
+	local found = false
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("BasePart") and not string.find(string.lower(descendant.Name), "particles", 1, true) then
+			found = true
+			local half = descendant.Size * 0.5
+			for _, xSign in { -1, 1 } do
+				for _, ySign in { -1, 1 } do
+					for _, zSign in { -1, 1 } do
+						local point = descendant.CFrame:PointToWorldSpace(Vector3.new(
+							half.X * xSign,
+							half.Y * ySign,
+							half.Z * zSign
+						))
+						minimum = Vector3.new(
+							math.min(minimum.X, point.X),
+							math.min(minimum.Y, point.Y),
+							math.min(minimum.Z, point.Z)
+						)
+						maximum = Vector3.new(
+							math.max(maximum.X, point.X),
+							math.max(maximum.Y, point.Y),
+							math.max(maximum.Z, point.Z)
+						)
+					end
+				end
+			end
+		end
+	end
+	if not found then return nil, nil end
+	return minimum, maximum
+end
+
+local function cloneMoundVisual(sizeName: string, targetScale: Vector3, groundPosition: Vector3): Model
+	local templateName = MOUND_TEMPLATE_NAMES[sizeName] or MOUND_TEMPLATE_NAMES.Small
+	local template = MoundAssets:FindFirstChild(templateName)
+	assert(template and template:IsA("Model"), string.format("Missing mound template %s", templateName))
+	local visual = template:Clone()
+	visual.Name = "MoundVisual"
+
+	local sourceDiameter = template:GetAttribute("SourceDiameter")
+	local targetDiameter = math.max(targetScale.X, targetScale.Z)
+	if type(sourceDiameter) == "number" and sourceDiameter > 0 then
+		visual:ScaleTo(targetDiameter / sourceDiameter)
+	end
+	local minimum, maximum = getVisualBounds(visual)
+	if minimum and maximum then
+		local groundCenter = Vector3.new(
+			(minimum.X + maximum.X) * 0.5,
+			minimum.Y,
+			(minimum.Z + maximum.Z) * 0.5
+		)
+		visual:PivotTo(CFrame.new(groundPosition - groundCenter) * visual:GetPivot())
+	end
+	local dustHost: BasePart? = nil
+	for _, descendant in visual:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = true
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+			descendant.Massless = true
+			local lowerName = string.lower(descendant.Name)
+			if descendant:IsA("MeshPart") then
+				descendant.DoubleSided = true
+				if string.find(lowerName, "dirt", 1, true) then
+					-- The baked FBX atlases contain opaque black gutters, so Roblox materials give a clean result.
+					descendant.TextureID = ""
+					descendant.Color = Color3.fromRGB(137, 94, 62)
+					descendant.Material = Enum.Material.Ground
+				elseif string.find(lowerName, "rocks", 1, true) then
+					descendant.TextureID = ""
+					descendant.Color = Color3.fromRGB(111, 100, 87)
+					descendant.Material = Enum.Material.Rock
+				end
+			end
+			if string.find(lowerName, "particles", 1, true) then
+				-- FBX particle cards do not retain their alpha texture in Studio and render as dark polygons.
+				descendant.Transparency = 1
+			elseif string.find(lowerName, "dirt", 1, true) then
+				dustHost = descendant
+			end
+		end
+	end
+	if dustHost then
+		local particleScale = math.clamp(targetDiameter / 4, 1, 3)
+		local dust = Instance.new("ParticleEmitter")
+		dust.Name = "MoundDust"
+		dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		dust.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 218, 145)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(132, 89, 55)),
+		})
+		dust.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.28),
+			NumberSequenceKeypoint.new(0.72, 0.5),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		dust.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.11 * particleScale),
+			NumberSequenceKeypoint.new(0.55, 0.19 * particleScale),
+			NumberSequenceKeypoint.new(1, 0.08 * particleScale),
+		})
+		dust.Lifetime = NumberRange.new(0.75, 1.25)
+		dust.Rate = 0.65 * particleScale
+		dust.Speed = NumberRange.new(0.35 * particleScale, 0.75 * particleScale)
+		dust.Acceleration = Vector3.new(0, 0.75, 0)
+		dust.Drag = 1.5
+		dust.SpreadAngle = Vector2.new(55, 55)
+		dust.Rotation = NumberRange.new(0, 360)
+		dust.RotSpeed = NumberRange.new(-45, 45)
+		dust.EmissionDirection = Enum.NormalId.Top
+		dust.LightInfluence = 0.55
+		dust.Parent = dustHost
+	end
+	return visual
+end
+
 function MoundVisuals.SpawnMound(data: MoundVisualPayload)
 	MoundVisuals.RemoveMound(data.Id)
 
@@ -285,16 +405,17 @@ function MoundVisuals.SpawnMound(data: MoundVisualPayload)
 	basePart.Name = "MoundPart"
 	basePart.Anchored = true
 	basePart.CanCollide = true
-	basePart.Material = Enum.Material.Ground
-	basePart.Color = if data.IsShared then AssetIds.Colors.MoundShared else AssetIds.Colors.MoundPersonal
-	basePart.Size = scale
-	basePart.Position = data.Position + Vector3.new(0, scale.Y * 0.4, 0)
+	basePart.CanTouch = false
+	basePart.CanQuery = true
+	basePart.Transparency = 1
+	basePart.Shape = Enum.PartType.Ball
+	basePart.Size = Vector3.new(scale.X * 0.9, math.max(1, scale.Y * 0.65), scale.Z * 0.9)
+	basePart.Position = data.Position + Vector3.new(0, basePart.Size.Y * 0.42, 0)
 	basePart:SetAttribute("MoundId", data.Id)
 	basePart.Parent = model
 
-	local mesh = Instance.new("SpecialMesh")
-	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Parent = basePart
+	local visual = cloneMoundVisual(data.Size, scale, data.Position)
+	visual.Parent = model
 
 	local highlight = Instance.new("Highlight")
 	highlight.Name = "SelectionHighlight"

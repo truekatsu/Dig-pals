@@ -1,5 +1,5 @@
 --!strict
--- Five-step onboarding with a client-only animated blue trail to live gameplay targets.
+-- Five-step onboarding with a client-only animated yellow trail to live gameplay targets.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,10 +9,11 @@ local MoundVisuals = require(script.Parent:WaitForChild("MoundVisuals"))
 local LocalPlayer = Players.LocalPlayer
 local TutorialController = {}
 
-local BLUE = Color3.fromRGB(72, 173, 255)
-local INK = Color3.fromRGB(16, 29, 47)
+local GUIDE_YELLOW = Color3.fromRGB(255, 205, 62)
+local INK = Color3.fromRGB(55, 38, 12)
 local ARROW_COUNT = 32
 local ARROW_SPACING = 5.5
+local MAX_TRAIL_DISTANCE = 58
 
 type TrailArrow = { Part: Part, Gui: BillboardGui, Label: TextLabel }
 local arrows: { TrailArrow } = {}
@@ -33,7 +34,7 @@ local isDone = false
 local started = false
 local hasEquippedPet = false
 local refreshElapsed = 0
-local completionRequested = false
+local lastCompletionRequest = 0
 
 local steps = {
 	{ Title = "Gali Small Mound", Text = "Pegang sekop, lalu klik gundukan." },
@@ -97,7 +98,7 @@ local function ensureGuidance()
 		gui.MaxDistance = 180
 		gui.Enabled = false
 		gui.Parent = part
-		local label = textLabel(gui, "Arrow", 24, BLUE)
+		local label = textLabel(gui, "Arrow", 24, GUIDE_YELLOW)
 		label.Size = UDim2.fromScale(1, 1)
 		label.Text = "▶"
 		label.TextScaled = true
@@ -108,9 +109,9 @@ local function ensureGuidance()
 	end
 	local highlight = Instance.new("Highlight")
 	highlight.Name = "TutorialTargetHighlight"
-	highlight.FillColor = BLUE
+	highlight.FillColor = GUIDE_YELLOW
 	highlight.FillTransparency = 0.9
-	highlight.OutlineColor = BLUE
+	highlight.OutlineColor = GUIDE_YELLOW
 	highlight.OutlineTransparency = 0.12
 	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 	highlight.Enabled = false
@@ -126,7 +127,7 @@ local function ensureGuidance()
 	gui.Enabled = false
 	gui.Parent = marker
 	markerGui = gui
-	local label = textLabel(gui, "TargetLabel", 13, BLUE)
+	local label = textLabel(gui, "TargetLabel", 13, GUIDE_YELLOW)
 	label.Size = UDim2.fromScale(1, 1)
 	label.TextXAlignment = Enum.TextXAlignment.Center
 	label.TextStrokeColor3 = INK
@@ -180,10 +181,10 @@ local function refreshTarget(root: BasePart)
 		hint = if LocalPlayer:GetAttribute("CurrentZone") == "Base" then "Pilih telur di Items > Eggs, lalu klik area Base." else "Pilih telur di Items > Eggs, lalu menuju Base."
 	end
 	targetPosition = position
-	if currentStep == 5 and position and not completionRequested then
+	if currentStep == 5 and position then
 		local delta = Vector2.new(root.Position.X - position.X, root.Position.Z - position.Z)
-		if delta.Magnitude <= 18 then
-			completionRequested = true
+		if delta.Magnitude <= 18 and (os.clock() - lastCompletionRequest) >= 1 then
+			lastCompletionRequest = os.clock()
 			Remotes.GetEvent("AdvanceTutorial"):FireServer(5)
 		end
 	end
@@ -215,18 +216,33 @@ local function renderTrail()
 	end
 	local origin = root.Position - Vector3.new(0, 0.65, 0)
 	local destination = targetPosition + Vector3.new(0, 0.65, 0)
-	local delta = destination - origin
+	local flatDestination = Vector3.new(destination.X, origin.Y, destination.Z)
+	local delta = flatDestination - origin
 	local length = delta.Magnitude
 	if length < 0.01 then return end
 	local direction = delta.Unit
 	local phase = (os.clock() * 2.3) % ARROW_SPACING
+	local visibleTrailLength = math.min(length, MAX_TRAIL_DISTANCE)
+	local groundParams = RaycastParams.new()
+	groundParams.FilterType = Enum.RaycastFilterType.Exclude
+	local ignore: { Instance } = {}
+	if guideFolder then table.insert(ignore, guideFolder) end
+	if character then table.insert(ignore, character) end
+	local clientMounds = workspace:FindFirstChild("ClientMounds")
+	if clientMounds then table.insert(ignore, clientMounds) end
+	groundParams.FilterDescendantsInstances = ignore
 	for i, arrow in arrows do
 		local distance = 2.5 + (i - 1) * ARROW_SPACING + phase
-		local visible = distance < length - 1.5
+		local visible = distance < visibleTrailLength - 1.5
 		if visible then
 			local pos = origin + direction * distance
+			local groundHit = workspace:Raycast(pos + Vector3.new(0, 20, 0), Vector3.new(0, -45, 0), groundParams)
+			if groundHit then pos = Vector3.new(pos.X, groundHit.Position.Y + 0.55, pos.Z) end
 			local screen = camera:WorldToViewportPoint(pos)
-			local nextScreen = camera:WorldToViewportPoint(pos + direction)
+			local nextPos = pos + direction
+			local nextGround = workspace:Raycast(nextPos + Vector3.new(0, 20, 0), Vector3.new(0, -45, 0), groundParams)
+			if nextGround then nextPos = Vector3.new(nextPos.X, nextGround.Position.Y + 0.55, nextPos.Z) end
+			local nextScreen = camera:WorldToViewportPoint(nextPos)
 			visible = screen.Z > 0 and nextScreen.Z > 0
 			arrow.Part.Position = pos
 			arrow.Label.Rotation = math.deg(math.atan2(nextScreen.Y - screen.Y, nextScreen.X - screen.X))
@@ -282,7 +298,7 @@ local function buildUI()
 	action.AnchorPoint = Vector2.new(0.5, 0)
 	action.Position = UDim2.new(0.5, 0, 0, 60)
 	action.Size = UDim2.fromOffset(112, 29)
-	action.BackgroundColor3 = BLUE
+	action.BackgroundColor3 = GUIDE_YELLOW
 	action.BorderSizePixel = 0
 	action.Font = Enum.Font.GothamBold
 	action.TextColor3 = INK
@@ -297,7 +313,7 @@ local function buildUI()
 				require(script.Parent:WaitForChild("TeleportController")).TeleportToBase()
 			end
 		elseif currentStep == 4 then
-			require(script.Parent:WaitForChild("PetBagController")).Open()
+			require(script.Parent:WaitForChild("InventoryController")).OpenInventory("Pet")
 		end
 	end)
 end
@@ -308,7 +324,7 @@ local function applyTutorial(step: any, done: any)
 		if nextStep ~= currentStep then
 			targetMoundId = nil
 			targetPosition = nil
-			completionRequested = false
+			lastCompletionRequest = 0
 		end
 		currentStep = nextStep
 	end

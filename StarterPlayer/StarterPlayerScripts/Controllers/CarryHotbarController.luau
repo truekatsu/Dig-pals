@@ -18,7 +18,7 @@ local ghostKey=nil
 local candidate=nil
 local function preview(parent,e)
 	local viewport=Instance.new("ViewportFrame") viewport.Name="CarryPreview" viewport.Size=UDim2.new(1,-10,0,51) viewport.Position=UDim2.fromOffset(5,8) viewport.BackgroundTransparency=1 viewport.ZIndex=12 viewport.Ambient=Color3.fromRGB(210,210,210) viewport.LightColor=Color3.new(1,1,1) viewport.Parent=parent
-	local model=Builder.Display(e.Kind,e.Id,e.Variant) model.Parent=viewport
+	local model=Builder.Display(e.Kind,e.Id,e.Variant,e.Weight) model.Parent=viewport
 	local cam=Instance.new("Camera") cam.FieldOfView=32 cam.CFrame=CFrame.lookAt(Vector3.new(3,1.7,4),Vector3.zero) cam.Parent=viewport viewport.CurrentCamera=cam
 end
 local function apply(snapshot)
@@ -26,14 +26,14 @@ local function apply(snapshot)
 	for i=4,9 do
 		local b=buttons[i] if not b then continue end
 		local e=state.Slots[tostring(i)]
-		local key=e and e.Kind..e.Key or ""
+		local key=e and e.Kind..e.Key..tostring(e.Weight or "") or ""
 		if refs[i]~=key then
 			refs[i]=key
 			local old=b:FindFirstChild("CarryPreview") if old then old:Destroy() end
 			local label=b:FindFirstChild("CarryName") if label then label:Destroy() end
 			if e then
 				preview(b,e)
-				label=Instance.new("TextLabel") label.Name="CarryName" label.BackgroundTransparency=1 label.Size=UDim2.new(1,-6,0,20) label.Position=UDim2.new(0,3,1,-23) label.Font=Enum.Font.FredokaOne label.TextSize=10 label.TextScaled=true label.TextColor3=Color3.fromRGB(255,245,215) label.Text=e.Name label.ZIndex=13 label.Parent=b
+				label=Instance.new("TextLabel") label.Name="CarryName" label.BackgroundTransparency=1 label.Size=UDim2.new(1,-6,0,20) label.Position=UDim2.new(0,3,1,-23) label.Font=Enum.Font.FredokaOne label.TextSize=10 label.TextScaled=true label.TextColor3=Color3.fromRGB(255,245,215) label.Text=e.Name..(e.Kind=="Items" and e.Weight and string.format(" %.2fkg",e.Weight) or "") label.ZIndex=13 label.Parent=b
 				local limit=Instance.new("UITextSizeConstraint") limit.MinTextSize=8 limit.MaxTextSize=11 limit.Parent=label
 			end
 		end

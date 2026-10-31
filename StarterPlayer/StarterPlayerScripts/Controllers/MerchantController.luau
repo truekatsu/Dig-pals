@@ -54,6 +54,7 @@ local isBusy = false
 local activeAnchorPart: BasePart? = nil
 local merchantTitle: string = "ITEM MERCHANT"
 local itemsMap: { [string]: number } = {}
+local itemWeightsMap: { [string]: { number } } = {}
 local coinsBalance: number = EconomyConfig.StartingCoins
 local bagLevel: number = 1
 local started = false
@@ -125,7 +126,10 @@ local function computeBagTotals(): (number, number)
 		local cfg = ItemsConfig.All[itemId]
 		if cfg and count > 0 then
 			totalCount += count
-			totalValue += count * cfg.SellPrice
+			local weights = itemWeightsMap[itemId] or {}
+			for index = 1, count do
+				totalValue += ItemsConfig.GetSellPrice(itemId, weights[index] or cfg.DefaultWeight)
+			end
 		end
 	end
 	return totalCount, totalValue
@@ -264,8 +268,12 @@ local function rebuildItemRows()
 		if rA ~= rB then
 			return rA > rB
 		end
-		if a.Config.SellPrice ~= b.Config.SellPrice then
-			return a.Config.SellPrice > b.Config.SellPrice
+		local aWeights = itemWeightsMap[a.Config.Id] or {}
+		local bWeights = itemWeightsMap[b.Config.Id] or {}
+		local aPrice = ItemsConfig.GetSellPrice(a.Config.Id, aWeights[1] or a.Config.DefaultWeight)
+		local bPrice = ItemsConfig.GetSellPrice(b.Config.Id, bWeights[1] or b.Config.DefaultWeight)
+		if aPrice ~= bPrice then
+			return aPrice > bPrice
 		end
 		return a.Config.Id < b.Config.Id
 	end)
@@ -278,8 +286,18 @@ local function rebuildItemRows()
 		local cfg = entry.Config
 		local count = entry.Count
 		local rarityColor = getRarityColor(cfg.Rarity)
-		local unitPrice = cfg.SellPrice
-		local stackValue = count * unitPrice
+		local weights = table.clone(itemWeightsMap[cfg.Id] or {})
+		while #weights < count do table.insert(weights, cfg.DefaultWeight or 1) end
+		table.sort(weights, function(a, b) return a > b end)
+		local unitPrice = ItemsConfig.GetSellPrice(cfg.Id, weights[1])
+		local stackValue = 0
+		local minWeight, maxWeight = math.huge, 0
+		for weightIndex = 1, count do
+			local weight = weights[weightIndex]
+			stackValue += ItemsConfig.GetSellPrice(cfg.Id, weight)
+			minWeight = math.min(minWeight, weight)
+			maxWeight = math.max(maxWeight, weight)
+		end
 
 		local row = Instance.new("Frame")
 		row.Name = "ItemRow_" .. cfg.Id
@@ -347,7 +365,9 @@ local function rebuildItemRows()
 		subLbl.TextXAlignment = Enum.TextXAlignment.Left
 		subLbl.TextTruncate = Enum.TextTruncate.AtEnd
 		subLbl.TextColor3 = COLORS.TextSecondary
-		subLbl.Text = string.format("%s | $%s", cfg.Rarity, Format.Commas(unitPrice))
+		subLbl.Text = if count > 1
+			then string.format("%s | %.2f–%.2f kg | termahal $%s", cfg.Rarity, minWeight, maxWeight, Format.Commas(unitPrice))
+			else string.format("%s | %.2f kg • %s | $%s", cfg.Rarity, maxWeight, ItemsConfig.GetWeightClass(cfg.Id, maxWeight), Format.Commas(unitPrice))
 		subLbl.Parent = row
 
 		local sellOneBtn = Instance.new("TextButton")
@@ -426,6 +446,16 @@ local function applySnapshotPayload(payload: any)
 			end
 		end
 		itemsMap = nextItems
+	end
+	if type(payload.ItemWeights) == "table" then
+		local nextWeights: { [string]: { number } } = {}
+		for itemId, weights in payload.ItemWeights do
+			if type(itemId) == "string" and type(weights) == "table" then
+				nextWeights[itemId] = table.clone(weights)
+				table.sort(nextWeights[itemId], function(a, b) return a > b end)
+			end
+		end
+		itemWeightsMap = nextWeights
 	end
 
 	rebuildItemRows()

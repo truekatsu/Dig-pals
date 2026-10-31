@@ -7,7 +7,8 @@ local Shared=RS.Shared
 local Remotes=require(Shared.Util.Remotes)
 local State=require(script.Parent.PlayerState)
 local Builder=require(Shared.CarryModelBuilder)
-local Items=require(Shared.Config.Items).All
+local ItemsConfig=require(Shared.Config.Items)
+local Items=ItemsConfig.All
 local Eggs=require(Shared.Config.Eggs).All
 local Pets=require(Shared.Config.Pets).Species
 local Service={}
@@ -18,7 +19,12 @@ local function fail(message) return {Success=false,Message=message} end
 local function valid(player,e)
 	local p=State.Get(player)
 	if not p then return false end
-	if e.Kind=="Items" then return (p.Items[e.Id] or 0)>0 end
+	if e.Kind=="Items" then
+		if (p.Items[e.Id] or 0)<1 then return false end
+		if not e.Weight then return true end
+		for _,weight in (p.ItemWeights and p.ItemWeights[e.Id]) or {} do if weight==e.Weight then return true end end
+		return false
+	end
 	if e.Kind=="Pet" then return p.Pets[e.Key]~=nil and p.Pets[e.Key].Species==e.Id end
 	if e.Kind=="Eggs" then for _,egg in p.EggBag do if egg==e.Egg then return true end end end
 	return false
@@ -34,7 +40,7 @@ end
 function Service.Snapshot(player)
 	local result={Slots={},ActiveSlot=0}
 	for slot,e in slotsByPlayer[player] or {} do
-		if valid(player,e) then result.Slots[tostring(slot)]={Slot=slot,Kind=e.Kind,Id=e.Id,Key=e.Key,Name=e.Name,Rarity=e.Rarity,Variant=e.Variant} end
+		if valid(player,e) then result.Slots[tostring(slot)]={Slot=slot,Kind=e.Kind,Id=e.Id,Key=e.Key,Name=e.Name,Rarity=e.Rarity,Variant=e.Variant,Weight=e.Weight,SellPrice=e.SellPrice,ModelScale=e.ModelScale} end
 	end
 	local held=Service.GetHeld(player)
 	if held then result.ActiveSlot=held.Slot end
@@ -67,8 +73,12 @@ function Service.Select(player,slot)
 end
 function Service.Assign(player,kind,id,reference)
 	local p=State.Get(player) if not p then return fail("Inventory loading.") end
-	local cfg,key,egg,variant
-	if kind=="Items" then cfg=Items[id] key=id if not cfg or (p.Items[id] or 0)<1 then return fail("Item not owned.") end
+	local cfg,key,egg,variant,weight,sellPrice,modelScale
+	if kind=="Items" then
+		cfg=Items[id] key=id if not cfg or (p.Items[id] or 0)<1 then return fail("Item not owned.") end
+		weight=cfg.DefaultWeight or 1
+		for _,ownedWeight in (p.ItemWeights and p.ItemWeights[id]) or {} do if ownedWeight>weight then weight=ownedWeight end end
+		sellPrice=ItemsConfig.GetSellPrice(id,weight) modelScale=ItemsConfig.GetModelScale(id,weight)
 	elseif kind=="Pet" then local pet=p.Pets[reference] if not pet or pet.Species~=id then return fail("Pet not owned.") end cfg=Pets[id] key=reference variant=pet.Variant
 	elseif kind=="Eggs" then egg=p.EggBag[tonumber(reference)] if not egg or egg.Id~=id then return fail("Egg no longer available. Reopen Eggs.") end cfg=Eggs[id] key=eggKeys[egg] or game.HttpService:GenerateGUID(false) eggKeys[egg]=key
 	else return fail("Invalid category.") end
@@ -81,7 +91,7 @@ function Service.Assign(player,kind,id,reference)
 		return Service.Select(player,slot)
 	end end
 	local slot=9 for i=4,9 do if slots[i]==nil then slot=i break end end
-	slots[slot]={Slot=slot,Kind=kind,Id=id,Key=key,Egg=egg,Variant=variant,Name=cfg.DisplayName or id,Rarity=egg and egg.Rarity or cfg.Rarity}
+	slots[slot]={Slot=slot,Kind=kind,Id=id,Key=key,Egg=egg,Variant=variant,Name=cfg.DisplayName or id,Rarity=egg and egg.Rarity or cfg.Rarity,Weight=weight,SellPrice=sellPrice,ModelScale=modelScale}
 	-- Replacement of slot 9 equips the new object rather than toggling the old one off.
 	local c=player.Character if c then for _,t in c:GetChildren() do if t:IsA("Tool") and t:GetAttribute("DigPalsCarryTool") then t:Destroy() end end end
 	return Service.Select(player,slot)

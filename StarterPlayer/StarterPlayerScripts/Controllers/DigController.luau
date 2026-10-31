@@ -47,6 +47,7 @@ local maxMisses = 3
 local sessionReady = false
 local awaitingStrike = false
 local started = false
+local lastCooldownHintAt = 0
 
 -- UI references
 local screenGui: ScreenGui? = nil
@@ -61,6 +62,9 @@ local hintToastLabel: TextLabel? = nil
 local resolveFill: Frame? = nil
 local resolveHeart: TextLabel? = nil
 local resolveLabel: TextLabel? = nil
+local cooldownOverlay: Frame? = nil
+local cooldownFill: Frame? = nil
+local cooldownLabel: TextLabel? = nil
 
 local function updateResolve()
 	local ratio = math.clamp(1 - misses / maxMisses, 0, 1)
@@ -381,6 +385,10 @@ function DigController.AttemptStrike()
 
 	local serverNow = workspace:GetServerTimeNow()
 	if serverNow < nextAllowedStrikeTime then
+		if os.clock() - lastCooldownHintAt >= 0.4 then
+			lastCooldownHintAt = os.clock()
+			showHintToast(string.format("Sekop sedang jeda • %.1f detik", nextAllowedStrikeTime - serverNow), Color3.fromRGB(255, 205, 90))
+		end
 		return
 	end
 	nextAllowedStrikeTime = serverNow + getEquippedShovelCooldown()
@@ -532,6 +540,45 @@ local function createDigUI()
 	indStroke.Color = Color3.fromRGB(32, 39, 37)
 	indStroke.Thickness = 2
 	indStroke.Parent = indicator
+
+	local cooldown = Instance.new("Frame")
+	cooldown.Name = "CooldownOverlay"
+	cooldown.Size = UDim2.fromScale(1, 1)
+	cooldown.BackgroundColor3 = Color3.fromRGB(10, 15, 20)
+	cooldown.BackgroundTransparency = 0.28
+	cooldown.BorderSizePixel = 0
+	cooldown.Visible = false
+	cooldown.ZIndex = 6
+	cooldown.ClipsDescendants = true
+	cooldown.Parent = track
+	local cooldownCorner = Instance.new("UICorner")
+	cooldownCorner.CornerRadius = UDim.new(0, 12)
+	cooldownCorner.Parent = cooldown
+	cooldownOverlay = cooldown
+
+	local cooldownProgress = Instance.new("Frame")
+	cooldownProgress.Name = "CooldownProgress"
+	cooldownProgress.Size = UDim2.fromScale(1, 1)
+	cooldownProgress.BackgroundColor3 = Color3.fromRGB(235, 157, 48)
+	cooldownProgress.BackgroundTransparency = 0.48
+	cooldownProgress.BorderSizePixel = 0
+	cooldownProgress.ZIndex = 7
+	cooldownProgress.Parent = cooldown
+	cooldownFill = cooldownProgress
+
+	local cooldownText = Instance.new("TextLabel")
+	cooldownText.Name = "CooldownText"
+	cooldownText.Size = UDim2.fromScale(1, 1)
+	cooldownText.BackgroundTransparency = 1
+	cooldownText.Font = Enum.Font.GothamBlack
+	cooldownText.Text = "JEDA"
+	cooldownText.TextSize = 18
+	cooldownText.TextColor3 = Color3.fromRGB(255, 244, 211)
+	cooldownText.TextStrokeColor3 = Color3.fromRGB(48, 31, 12)
+	cooldownText.TextStrokeTransparency = 0.1
+	cooldownText.ZIndex = 8
+	cooldownText.Parent = cooldown
+	cooldownLabel = cooldownText
 
 	local rail = Instance.new("Frame")
 	rail.Name = "ResolveTrack"
@@ -791,7 +838,16 @@ function DigController.Start()
 			indicatorFrame.Position = UDim2.fromScale(pos, 0.5)
 
 			local onCooldown = now < nextAllowedStrikeTime or awaitingStrike or not sessionReady
+			local remaining = math.max(0, nextAllowedStrikeTime - now)
+			local cooldownDuration = math.max(0.01, getEquippedShovelCooldown())
 			indicatorFrame.BackgroundTransparency = if onCooldown then 0.45 else 0
+			if cooldownOverlay and cooldownFill and cooldownLabel then
+				cooldownOverlay.Visible = onCooldown
+				cooldownFill.Size = UDim2.fromScale(math.clamp(remaining / cooldownDuration, 0, 1), 1)
+				cooldownLabel.Text = if not sessionReady then "MENYIAPKAN..."
+					elseif awaitingStrike and remaining <= 0 then "MENGGALI..."
+					else string.format("JEDA  %.1fs", remaining)
+			end
 			digButton.Text = ""
 			if hudContainer then
 				local hint = hudContainer:FindFirstChild("InputHint")

@@ -63,6 +63,7 @@ function DataService.CreateDefaultProfile(): Types.PlayerProfile
 		BagLevel = Economy.StartingBagLevel,
 		BaseLevel = Economy.StartingBaseLevel,
 		Items = {},
+		ItemWeights = {},
 		EggBag = {
 			{
 				Id = "StarterEgg",

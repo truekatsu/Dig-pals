@@ -32,7 +32,7 @@ local BagLevels: { [number]: Types.BagLevelConfig } = {
 }
 
 local Economy = {
-	SchemaVersion = 1,
+	SchemaVersion = 2,
 	DataStoreName = "DigPalsPlayerData_v1",
 	StartingCoins = 100,
 	StartingShovel = "RustyShovel",

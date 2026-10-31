@@ -33,10 +33,46 @@ local function button(parent,text,pos,size,color)
 	return b
 end
 local rarityColors={Common=Color3.fromRGB(127,151,145),Uncommon=Green,Rare=Color3.fromRGB(66,151,214),Epic=Color3.fromRGB(166,104,208),Legendary=Gold}
+local SPECIES_EMOJIS: { [string]: string } = {
+	Dog = utf8.char(0x1F436),
+	Cat = utf8.char(0x1F431),
+	Mole = utf8.char(0x1F439),
+	Bunny = utf8.char(0x1F430),
+	Hamster = utf8.char(0x1F439),
+	Chick = utf8.char(0x1F424),
+	Fox = utf8.char(0x1F98A),
+	Badger = utf8.char(0x1F9A1),
+	Hedgehog = utf8.char(0x1F994),
+	Ferret = utf8.char(0x1F9A6),
+	Raccoon = utf8.char(0x1F99D),
+	Turtle = utf8.char(0x1F422),
+	Beetle = utf8.char(0x1FAB2),
+	Piglet = utf8.char(0x1F437),
+	Armadillo = utf8.char(0x1F6E1),
+	Pangolin = utf8.char(0x1F98E),
+	Boar = utf8.char(0x1F417),
+	Owl = utf8.char(0x1F989),
+	Chameleon = utf8.char(0x1F98E),
+	CrystalFox = utf8.char(0x1F48E),
+	MagmaHound = utf8.char(0x1F525),
+	EarthGolem = utf8.char(0x1F5FF),
+	RuneBear = utf8.char(0x1F43B),
+	TerraDragon = utf8.char(0x1F432),
+	CelestialGriffin = utf8.char(0x1F985),
+}
 function UI.Mount(controller, gui, shovels)
-	local player=Players.LocalPlayer
-	local Remotes=require(RS.Shared.Util.Remotes)
-	local configs={Items=require(RS.Shared.Config.Items).All, Eggs=require(RS.Shared.Config.Eggs).All, Shovel=require(RS.Shared.Config.Shovels).All}
+	local player = Players.LocalPlayer
+	local Shared = RS:WaitForChild("Shared")
+	local Config = Shared:WaitForChild("Config")
+	local Util = Shared:WaitForChild("Util")
+	local Remotes = require(Util:WaitForChild("Remotes"))
+	local ItemsConfig = require(Config:WaitForChild("Items"))
+	local configs = {
+		Items = ItemsConfig.All,
+		Eggs = require(Config:WaitForChild("Eggs")).All,
+		Shovel = require(Config:WaitForChild("Shovels")).All,
+		Pet = require(Config:WaitForChild("Pets")).Species,
+	}
 	local snapshot={}
 	local busy=false
 	local loaded=false
@@ -102,6 +138,25 @@ function UI.Mount(controller, gui, shovels)
 		local n=label(b,tostring(i),UDim2.fromOffset(6,3),UDim2.fromOffset(16,20),13,Cream) n.ZIndex=15
 	end
 	require(script.Parent.CarryHotbarController).Mount(bar)
+	local function getItemStackText(itemId, quantity, cfg)
+		local rawWeights = snapshot.ItemWeights and snapshot.ItemWeights[itemId]
+		local minimum = math.huge
+		local maximum = 0
+		for index = 1, quantity do
+			local weight = if type(rawWeights) == "table" then tonumber(rawWeights[index]) else nil
+			weight = weight or tonumber(cfg.DefaultWeight) or 1
+			minimum = math.min(minimum, weight)
+			maximum = math.max(maximum, weight)
+		end
+		if minimum == math.huge then
+			minimum = tonumber(cfg.DefaultWeight) or 1
+			maximum = minimum
+		end
+		if math.abs(maximum - minimum) < 0.005 then
+			return string.format("x%d • %.2f kg", quantity, maximum)
+		end
+		return string.format("x%d • %.2f–%.2f kg", quantity, minimum, maximum)
+	end
 	local function render()
 		local cat=controller.GetActiveCategory()
 		local shovelMode=cat=="Shovel"
@@ -128,11 +183,12 @@ function UI.Mount(controller, gui, shovels)
 			for guid,pet in pairs(snapshot.Pets or {}) do table.insert(entries,{id=pet.Species,guid=guid,pet=pet,rarity=pet.Rarity}) end
 		end
 		table.sort(entries,function(a,b) return tostring(a.id)..tostring(a.guid)<tostring(b.id)..tostring(b.guid) end)
-		count.Text=#entries..(cat=="Shovel" and " TOOLS OWNED" or " FINDS")
+		count.Text=#entries..(cat=="Shovel" and " TOOLS OWNED" or cat=="Pet" and " PETS" or " FINDS")
 		status.Text=errorText or ""
 		status.Visible=errorText~=nil
 		if #entries==0 then
-			local empty=label(scroll,loaded and "Empty..." or "Loading...",UDim2.fromScale(0,.36),UDim2.new(1,0,0,55),32,Color3.fromRGB(154,137,98))
+			local emptyMsg = if loaded then (if cat == "Pet" then "Tidak ada pet di tas..." else "Empty...") else "Loading..."
+			local empty=label(scroll,emptyMsg,UDim2.fromScale(0,.36),UDim2.new(1,0,0,55),32,Color3.fromRGB(154,137,98))
 			empty.Name="EmptyState"
 			scroll.CanvasSize=UDim2.new()
 			return
@@ -151,19 +207,31 @@ function UI.Mount(controller, gui, shovels)
 				make("ImageLabel",band,{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=shovels[entry.id].Icon,ScaleType=Enum.ScaleType.Fit,ZIndex=43})
 			elseif cat=="Eggs" then
 				make("ImageLabel",band,{AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(66,66),BackgroundTransparency=1,Image=MenuIcons.Eggs,ScaleType=Enum.ScaleType.Fit,ZIndex=43})
+			elseif cat=="Pet" then
+				local em = SPECIES_EMOJIS[entry.id] or utf8.char(0x1F43E)
+				local emojiLbl = label(band, em, UDim2.new(0, 0, 0, 0), UDim2.fromScale(1, 1), 38)
+				emojiLbl.ZIndex = 43
 			else
 				-- Native toy-like tokens avoid missing/unpublished image assets.
-				local token=make("Frame",band,{AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=cat=="Eggs" and UDim2.fromOffset(40,54) or UDim2.fromOffset(49,44),BackgroundColor3=accent,Rotation=cat=="Items" and 25 or 0,BorderSizePixel=0,ZIndex=43}) round(token,cat=="Eggs" and 24 or 12) stroke(token,Ink,2)
-				if cat=="Pet" then
-					for _,px in {.3,.7} do make("Frame",token,{Size=UDim2.fromOffset(5,7),Position=UDim2.fromScale(px,.4),BackgroundColor3=Ink,BorderSizePixel=0,ZIndex=44}) end
-				else label(token,cat=="Eggs" and "?" or "✦",UDim2.new(),UDim2.fromScale(1,1),25,Cream).ZIndex=44 end
+				local token=make("Frame",band,{AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(49,44),BackgroundColor3=accent,Rotation=25,BorderSizePixel=0,ZIndex=43}) round(token,12) stroke(token,Ink,2)
+				label(token,"✦",UDim2.new(),UDim2.fromScale(1,1),25,Cream).ZIndex=44
 			end
 			local name=label(card,cfg.DisplayName or tostring(entry.id),UDim2.fromOffset(6,92),UDim2.new(1,-12,0,35),16)
 			name.TextWrapped=true name.ZIndex=44
-			label(card,active and "EQUIPPED" or entry.quantity and "x"..entry.quantity or cat=="Pet" and "LV. "..tostring(entry.pet.Level or 1) or string.upper(rarity),UDim2.fromOffset(6,132),UDim2.new(1,-12,0,26),13,active and Green or Ink).ZIndex=44
+			local detailText = active and "EQUIPPED"
+				or cat == "Items" and getItemStackText(entry.id, entry.quantity or 1, cfg)
+				or entry.quantity and "x" .. entry.quantity
+				or cat == "Pet" and "LV. " .. tostring(entry.pet.Level or 1)
+				or string.upper(rarity)
+			local detail = label(card,detailText,UDim2.fromOffset(6,132),UDim2.new(1,-12,0,26),13,active and Green or Ink)
+			detail.ZIndex=44
+			if cat == "Items" then
+				detail.TextScaled = true
+				make("UITextSizeConstraint", detail, { MinTextSize = 9, MaxTextSize = 13 })
+			end
 			card.Activated:Connect(function()
-if busy then return end
-				if cat~="Shovel" then
+				if busy then return end
+				if cat == "Eggs" then
 					busy=true
 					local result=require(script.Parent.CarryHotbarController).Assign(cat,entry.id,entry.guid or entry.index or entry.id)
 					busy=false
@@ -171,12 +239,28 @@ if busy then return end
 					return
 				end
 				busy=true errorText=nil
-local remote=cat=="Items" and "HoldItem" or cat=="Shovel" and "EquipShovel" or active and "UnequipPet" or "EquipPet"
+				local remote=cat=="Items" and "HoldItem" or cat=="Shovel" and "EquipShovel" or active and "UnequipPet" or "EquipPet"
 				local ok,result=pcall(function() return Remotes.GetFunction(remote):InvokeServer(entry.guid or entry.id) end)
-				if not ok or not result or not result.Success then errorText=type(result)=="table" and result.Message or "Unable to equip. Please try again." end
-				if ok and result and result.Success and cat=="Shovel" then snapshot.EquippedShovel=entry.id controller.SyncEquippedShovel(entry.id) end
+				if not ok or not result or not result.Success then
+					errorText=type(result)=="table" and result.Message or "Unable to equip. Please try again."
+				end
+				if ok and result and result.Success then
+					if cat=="Shovel" then
+						snapshot.EquippedShovel=entry.id
+						controller.SyncEquippedShovel(entry.id)
+					elseif cat=="Pet" then
+						snapshot.EquippedPets = snapshot.EquippedPets or {}
+						if active then
+							local pos = table.find(snapshot.EquippedPets, entry.guid)
+							if pos then table.remove(snapshot.EquippedPets, pos) end
+						else
+							table.insert(snapshot.EquippedPets, entry.guid)
+						end
+					elseif cat=="Items" then
+						controller.CloseInventory()
+					end
+				end
 				busy=false
-				if ok and result and result.Success and cat=="Items" then controller.CloseInventory() end
 				render()
 			end)
 		end

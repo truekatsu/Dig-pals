@@ -46,6 +46,9 @@ export type DropMutationTarget = {
 	SellPrice: number,
 	AutoSold: boolean,
 	AutoSoldCoins: number,
+	Weight: number?,
+	WeightClass: string?,
+	ModelScale: number?,
 }
 
 local MERCHANT_MAX_INTERACT_DISTANCE = 26
@@ -86,6 +89,41 @@ function InventoryService.SanitizeInventory(profile: Types.PlayerProfile): boole
 				profile.Items[itemId] = intCount
 				changed = true
 			end
+		end
+	end
+
+	-- Reconcile per-copy item weights. Legacy saves receive default weights, preserving old prices.
+	if type(profile.ItemWeights) ~= "table" then
+		profile.ItemWeights = {}
+		changed = true
+	end
+	for itemId in profile.ItemWeights do
+		if profile.Items[itemId] == nil or ItemsConfig.All[itemId] == nil then
+			profile.ItemWeights[itemId] = nil
+			changed = true
+		end
+	end
+	for itemId, count in profile.Items do
+		local cfg = ItemsConfig.All[itemId]
+		local rawList = profile.ItemWeights[itemId]
+		local cleaned: { number } = {}
+		if type(rawList) == "table" and cfg then
+			for _, rawWeight in rawList do
+				local weight = tonumber(rawWeight)
+				if weight and weight == weight and weight > 0 then
+					table.insert(cleaned, math.clamp(weight, (cfg.DefaultWeight or 1) * 0.5, cfg.MaxWeight or (cfg.DefaultWeight or 1) * 4))
+				end
+				if #cleaned >= count then break end
+			end
+		end
+		while #cleaned < count do table.insert(cleaned, cfg and (cfg.DefaultWeight or 1) or 1) end
+		local differs = type(rawList) ~= "table" or #rawList ~= #cleaned
+		if not differs and type(rawList) == "table" then
+			for index, weight in cleaned do if rawList[index] ~= weight then differs = true; break end end
+		end
+		if differs then
+			profile.ItemWeights[itemId] = cleaned
+			changed = true
 		end
 	end
 
@@ -184,10 +222,18 @@ function InventoryService.AddDropToProfile(profile: Types.PlayerProfile, drop: D
 			return
 		end
 		profile.Items[itemCfg.Id] = (profile.Items[itemCfg.Id] or 0) + 1
+		if type(profile.ItemWeights) ~= "table" then profile.ItemWeights = {} end
+		local weights = profile.ItemWeights[itemCfg.Id]
+		if type(weights) ~= "table" then weights = {}; profile.ItemWeights[itemCfg.Id] = weights end
+		local weight = tonumber(drop.Weight) or ItemsConfig.RollWeight(itemCfg.Id)
+		table.insert(weights, weight)
 		if profile.Index and profile.Index.Items then
 			profile.Index.Items[itemCfg.Id] = true
 		end
-		drop.SellPrice = itemCfg.SellPrice
+		drop.Weight = weight
+		drop.WeightClass = ItemsConfig.GetWeightClass(itemCfg.Id, weight)
+		drop.ModelScale = ItemsConfig.GetModelScale(itemCfg.Id, weight)
+		drop.SellPrice = ItemsConfig.GetSellPrice(itemCfg.Id, weight)
 		drop.AutoSold = false
 		drop.AutoSoldCoins = 0
 	elseif drop.DropType == "Egg" then
@@ -257,15 +303,20 @@ function InventoryService.SellItemInProfile(
 		}
 	end
 
-	local itemCfg = ItemsConfig.All[itemId]
-	local unitPrice = math.max(0, itemCfg.SellPrice)
-	local earned = count * unitPrice
+	local weights = profile.ItemWeights[itemId]
+	table.sort(weights, function(a, b) return a > b end)
+	local earned = 0
+	for _ = 1, count do
+		local weight = table.remove(weights, 1)
+		earned += ItemsConfig.GetSellPrice(itemId, weight)
+	end
 
 	local remaining = ownedCount - count
 	if remaining > 0 then
 		profile.Items[itemId] = remaining
 	else
 		profile.Items[itemId] = nil
+		profile.ItemWeights[itemId] = nil
 	end
 
 	profile.Coins = math.max(0, profile.Coins + earned)
@@ -292,9 +343,10 @@ function InventoryService.SellAllItemsInProfile(profile: Types.PlayerProfile): S
 	for itemId, count in profile.Items do
 		local itemCfg = ItemsConfig.All[itemId]
 		if itemCfg and count > 0 then
-			local unitPrice = math.max(0, itemCfg.SellPrice)
 			totalSold += count
-			totalEarned += count * unitPrice
+			for _, weight in profile.ItemWeights[itemId] do
+				totalEarned += ItemsConfig.GetSellPrice(itemId, weight)
+			end
 		end
 	end
 
@@ -312,6 +364,7 @@ function InventoryService.SellAllItemsInProfile(profile: Types.PlayerProfile): S
 	end
 
 	table.clear(profile.Items)
+	table.clear(profile.ItemWeights)
 	profile.Coins = math.max(0, profile.Coins + totalEarned)
 	profile.TotalCoinsEarned += totalEarned
 	local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
@@ -623,7 +676,11 @@ function InventoryService.SellItem(
 		}
 	end
 
-	if result.Success then refreshHeldItems(player) end
+	if result.Success then
+		refreshHeldItems(player)
+		require(script.Parent:WaitForChild("ShovelInventoryService")).SendStateSync(player)
+		DataService.SavePlayer(player)
+	end
 	if result.Success and (result.CoinsEarned or 0) > 0 then
 		local QuestService = require(script.Parent:WaitForChild("QuestService"))
 		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
@@ -669,7 +726,11 @@ function InventoryService.SellAllItems(player: Player, bypassProximityForTest: b
 		}
 	end
 
-	if result.Success then refreshHeldItems(player) end
+	if result.Success then
+		refreshHeldItems(player)
+		require(script.Parent:WaitForChild("ShovelInventoryService")).SendStateSync(player)
+		DataService.SavePlayer(player)
+	end
 	if result.Success and (result.CoinsEarned or 0) > 0 then
 		local QuestService = require(script.Parent:WaitForChild("QuestService"))
 		QuestService.RecordProgress(player, "CoinsFromSellingItems", result.CoinsEarned)
@@ -750,6 +811,8 @@ local function setupDebugBagCommands()
 				local needed = math.max(0, cap - cur)
 				if needed > 0 then
 					prof.Items["Pebble"] = (prof.Items["Pebble"] or 0) + needed
+					prof.ItemWeights["Pebble"] = prof.ItemWeights["Pebble"] or {}
+					for _ = 1, needed do table.insert(prof.ItemWeights["Pebble"], ItemsConfig.All.Pebble.DefaultWeight or 1) end
 					prof.Index.Items["Pebble"] = true
 				end
 			end)
@@ -757,6 +820,8 @@ local function setupDebugBagCommands()
 		elseif ItemsConfig.All[argId] ~= nil then
 			PlayerState.Mutate(player, function(prof: Types.PlayerProfile)
 				prof.Items[argId] = (prof.Items[argId] or 0) + argCount
+				prof.ItemWeights[argId] = prof.ItemWeights[argId] or {}
+				for _ = 1, argCount do table.insert(prof.ItemWeights[argId], ItemsConfig.RollWeight(argId)) end
 				prof.Index.Items[argId] = true
 			end)
 			print(string.format("[InventoryService] Granted %dx %s to %s", argCount, argId, player.Name))

@@ -30,6 +30,7 @@ local MoundService = {}
 
 local activeMounds: { [string]: MoundInstance } = {}
 local lastSpawnClock = 0
+local lastTutorialCheckClock = 0
 local rng = Random.new()
 local started = false
 
@@ -225,7 +226,9 @@ local function findValidGroundPositionNear(referencePosition: Vector3, moundSize
 	local clearance = radius + MoundsConfig.ObstacleClearanceStuds
 	local groundRay = getGroundRaycastParams()
 	local startAngle = rng:NextNumber(0, math.pi * 2)
-	for _, distance in { 10, 14, 18, 22, 26, 30 } do
+	-- The player starts at the center plaza, so continue just beyond its curb until
+	-- the first collision-free grass ring is found.
+	for _, distance in { 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 52, 58, 66, 74 } do
 		for directionIndex = 0, 11 do
 			local angle = startAngle + directionIndex * math.pi / 6
 			local probe = referencePosition + Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
@@ -424,6 +427,7 @@ function MoundService.Start()
 	end
 	started = true
 	lastSpawnClock = os.clock() - MoundsConfig.SpawnIntervalSeconds
+	lastTutorialCheckClock = 0
 
 	Players.PlayerAdded:Connect(setupPlayer)
 
@@ -440,6 +444,15 @@ function MoundService.Start()
 
 			MoundService.CheckIdleDespawns(nowEpoch)
 			MoundService.AuditActiveMounds()
+			if (nowClock - lastTutorialCheckClock) >= 2 then
+				lastTutorialCheckClock = nowClock
+				for _, player in Players:GetPlayers() do
+					local step = player:GetAttribute("TutorialStep")
+					if player:GetAttribute("TutorialDone") ~= true and (step == 1 or step == 4) then
+						MoundService.EnsureTutorialMound(player)
+					end
+				end
+			end
 
 			local activeCount = MoundService.GetActiveCount()
 			if #Players:GetPlayers() > 0 and activeCount < MoundsConfig.MaxActivePerServer then

@@ -237,11 +237,11 @@ function HudController.ShowDropSummary(summary: any)
 			)
 		else
 			subLabel.TextColor3 = rarityColor
-			subLabel.Text = string.format(
-				"%s | Nilai Jual: $%s",
-				rarityName,
-				Format.Commas(tonumber(drop.SellPrice) or 0)
-			)
+			if drop.DropType == "Item" and type(drop.Weight) == "number" then
+				subLabel.Text = string.format("%.2f kg • %s | Nilai: $%s", drop.Weight, tostring(drop.WeightClass or "Wajar"), Format.Commas(tonumber(drop.SellPrice) or 0))
+			else
+				subLabel.Text = string.format("%s | Nilai Jual: $%s", rarityName, Format.Commas(tonumber(drop.SellPrice) or 0))
+			end
 		end
 		subLabel.Parent = card
 

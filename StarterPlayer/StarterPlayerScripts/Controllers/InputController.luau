@@ -15,6 +15,7 @@ local IndexController = require(Controllers:WaitForChild("IndexController"))
 local QuestStreakController = require(Controllers:WaitForChild("QuestStreakController"))
 local LeaderboardController = require(Controllers:WaitForChild("LeaderboardController"))
 local BaseController = require(Controllers:WaitForChild("BaseController"))
+local BaseMenuController = require(Controllers:WaitForChild("BaseMenuController"))
 local MerchantController = require(Controllers:WaitForChild("MerchantController"))
 local OfflineIncomeController = require(Controllers:WaitForChild("OfflineIncomeController"))
 
@@ -51,6 +52,9 @@ function InputController.CloseActiveModal(): boolean
 		BaseController.CloseIncubatorModal()
 		BaseController.CloseCelebration()
 		return true
+	elseif BaseMenuController.IsOpen() then
+		BaseMenuController.Close()
+		return true
 	elseif OfflineIncomeController.IsOpen() then
 		OfflineIncomeController.Close()
 		return true
@@ -67,6 +71,7 @@ function InputController.IsAnyModalOpen(): boolean
 		or ShovelShopController.IsOpen()
 		or MerchantController.IsOpen()
 		or BaseController.IsOpen()
+		or BaseMenuController.IsOpen()
 		or OfflineIncomeController.IsOpen()
 end
 

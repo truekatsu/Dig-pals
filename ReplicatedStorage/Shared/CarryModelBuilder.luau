@@ -1,13 +1,14 @@
 --!nonstrict
 -- Shared display geometry for hotbar previews, equipped loot, pets and placed eggs.
 local RS = game:GetService("ReplicatedStorage")
-local Items = require(RS.Shared.Config.Items).All
+local ItemsConfig = require(RS.Shared.Config.Items)
+local Items = ItemsConfig.All
 local Eggs = require(RS.Shared.Config.Eggs).All
 local Pets = require(RS.Shared.Config.Pets).Species
 local Builder = {}
 local colors = {Common=Color3.fromRGB(155,139,114),Uncommon=Color3.fromRGB(88,183,126),Rare=Color3.fromRGB(75,154,216),Epic=Color3.fromRGB(174,107,216),Legendary=Color3.fromRGB(255,199,66)}
 
-function Builder.Display(kind, id, variant)
+function Builder.Display(kind, id, variant, weight)
 	local cfg = (kind == "Eggs" and Eggs or kind == "Pet" and Pets or Items)[id] or {}
 	local model = Instance.new("Model")
 	model.Name = id
@@ -61,6 +62,7 @@ function Builder.Display(kind, id, variant)
 	end
 	local size=model:GetExtentsSize()
 	model:ScaleTo(model:GetScale() * 2 / math.max(size.X,size.Y,size.Z))
+	if kind == "Items" then model:ScaleTo(model:GetScale() * ItemsConfig.GetModelScale(id, weight)) end
 	local box=model:GetBoundingBox()
 	for _,p in model:GetDescendants() do if p:IsA("BasePart") then p.CFrame=CFrame.new(-box.Position)*p.CFrame end end
 	model.WorldPivot=CFrame.identity
@@ -75,11 +77,15 @@ function Builder.Tool(entry)
 	tool:SetAttribute("CarryKind",entry.Kind)
 	tool:SetAttribute("CarryKey",entry.Key)
 	tool:SetAttribute("CarrySlot",entry.Slot)
-	if entry.Kind=="Items" then tool:SetAttribute("DigPalsLootTool",true) tool:SetAttribute("ItemId",entry.Id) end
+	if entry.Kind=="Items" then
+		tool:SetAttribute("DigPalsLootTool",true) tool:SetAttribute("ItemId",entry.Id)
+		tool:SetAttribute("ItemWeight",entry.Weight) tool:SetAttribute("ItemSellPrice",entry.SellPrice)
+		tool:SetAttribute("ItemModelScale",entry.ModelScale)
+	end
 	local handle=Instance.new("Part")
 	handle.Name="Handle" handle.Size=Vector3.new(.2,.2,.2) handle.Transparency=1
 	handle.CanCollide=false handle.CanTouch=false handle.CanQuery=false handle.Massless=true handle.Parent=tool
-	local model=Builder.Display(entry.Kind,entry.Id,entry.Variant)
+	local model=Builder.Display(entry.Kind,entry.Id,entry.Variant,entry.Weight)
 	for _,p in model:GetDescendants() do if p:IsA("BasePart") then
 		p.CFrame=CFrame.new(0,-.15,-.65)*p.CFrame p.Anchored=false p.Parent=tool
 		local weld=Instance.new("WeldConstraint") weld.Part0=handle weld.Part1=p weld.Parent=p

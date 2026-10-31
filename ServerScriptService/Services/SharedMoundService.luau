@@ -704,14 +704,18 @@ function SharedMoundService.CalculateRewardsForUser(
 			else "Common"
 		local pool = itemsByRarity[chosenRarity] or itemsByRarity.Common
 		local itemCfg = pool[rng:NextInteger(1, #pool)]
+		local weight = ItemsConfig.RollWeight(itemCfg.Id, rng)
 		local drop = {
 			DropType = "Item",
 			Id = itemCfg.Id,
 			DisplayName = itemCfg.DisplayName,
 			Rarity = chosenRarity,
-			SellPrice = itemCfg.SellPrice,
+			SellPrice = ItemsConfig.GetSellPrice(itemCfg.Id, weight),
 			AutoSold = false,
 			AutoSoldCoins = 0,
+			Weight = weight,
+			WeightClass = ItemsConfig.GetWeightClass(itemCfg.Id, weight),
+			ModelScale = ItemsConfig.GetModelScale(itemCfg.Id, weight),
 		}
 		table.insert(itemDrops, drop)
 	end
