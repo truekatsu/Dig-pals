@@ -15,6 +15,8 @@ local TARGET_HEIGHT_STUDS = 2.0 -- Cute companion scale (height 2.0 studs)
 
 local function findImportedDog(): (Instance?, MeshPart?)
 	local names = {
+		"DigPals_Dog_Model",
+		"DigPals_Dog",
 		"DigPals_CometMinerDog_Rig",
 		"DPM_CometMinerDog_Mesh",
 		"pet_dog",
@@ -86,7 +88,7 @@ function ProcessImportedPetDog.Run(): (boolean, string)
 		dogMesh.Parent = model
 	end
 
-	dogMesh.Color = Color3.fromRGB(15, 30, 60)
+	dogMesh.Color = Color3.fromRGB(200, 138, 75) -- Warm golden brown (#C88A4B)
 	dogMesh.Material = Enum.Material.SmoothPlastic
 	dogMesh.CanCollide = false
 	dogMesh.CanTouch = false
@@ -121,6 +123,51 @@ function ProcessImportedPetDog.Run(): (boolean, string)
 		weld.Part0 = rootPart
 		weld.Part1 = dogMesh
 		weld.Parent = rootPart
+	end
+
+	-- Red collar and gold bell
+	local collar = model:FindFirstChild("Collar") :: BasePart?
+	if not collar then
+		collar = Instance.new("Part")
+		collar.Name = "Collar"
+		collar.Size = Vector3.new(0.95, 0.18, 0.95)
+		collar.Shape = Enum.PartType.Cylinder
+		collar.Color = Color3.fromRGB(196, 54, 46) -- Red (#C4362E)
+		collar.Material = Enum.Material.SmoothPlastic
+		collar.CanCollide = false
+		collar.CanTouch = false
+		collar.CanQuery = false
+		collar.Massless = true
+		collar.CFrame = dogMesh.CFrame * CFrame.new(0, -0.15, -0.55) * CFrame.Angles(0, 0, math.rad(90))
+		collar.Parent = model
+
+		local cWeld = Instance.new("WeldConstraint")
+		cWeld.Name = "CollarWeld"
+		cWeld.Part0 = rootPart
+		cWeld.Part1 = collar
+		cWeld.Parent = collar
+	end
+
+	local bell = model:FindFirstChild("Bell") :: BasePart?
+	if not bell then
+		bell = Instance.new("Part")
+		bell.Name = "Bell"
+		bell.Size = Vector3.new(0.24, 0.24, 0.24)
+		bell.Shape = Enum.PartType.Ball
+		bell.Color = Color3.fromRGB(244, 185, 44) -- Gold bell (#F4B92C)
+		bell.Material = Enum.Material.SmoothPlastic
+		bell.CanCollide = false
+		bell.CanTouch = false
+		bell.CanQuery = false
+		bell.Massless = true
+		bell.CFrame = dogMesh.CFrame * CFrame.new(0, -0.30, -0.72)
+		bell.Parent = model
+
+		local bWeld = Instance.new("WeldConstraint")
+		bWeld.Name = "BellWeld"
+		bWeld.Part0 = rootPart
+		bWeld.Part1 = bell
+		bWeld.Parent = bell
 	end
 
 	local animController = model:FindFirstChildOfClass("AnimationController")

@@ -15,6 +15,8 @@ local TARGET_HEIGHT_STUDS = 2.0 -- Cute companion scale (height 2.0 studs)
 
 local function findImportedBunny(): (Instance?, MeshPart?)
 	local names = {
+		"DigPals_Bunny_Model",
+		"DigPals_Bunny",
 		"DigPals_MinerBunny_Rig",
 		"DPM_MinerBunny_Mesh",
 		"pet_bunny",
@@ -86,7 +88,7 @@ function ProcessImportedPetBunny.Run(): (boolean, string)
 		bunnyMesh.Parent = model
 	end
 
-	bunnyMesh.Color = Color3.fromRGB(245, 225, 195)
+	bunnyMesh.Color = Color3.fromRGB(250, 240, 230) -- Warm cream (#FAF0E6)
 	bunnyMesh.Material = Enum.Material.SmoothPlastic
 	bunnyMesh.CanCollide = false
 	bunnyMesh.CanTouch = false
@@ -121,6 +123,73 @@ function ProcessImportedPetBunny.Run(): (boolean, string)
 		weld.Part0 = rootPart
 		weld.Part1 = bunnyMesh
 		weld.Parent = rootPart
+	end
+
+	-- Red collar and signature carrot pendant
+	local collar = model:FindFirstChild("Collar") :: BasePart?
+	if not collar then
+		collar = Instance.new("Part")
+		collar.Name = "Collar"
+		collar.Size = Vector3.new(0.85, 0.16, 0.85)
+		collar.Shape = Enum.PartType.Cylinder
+		collar.Color = Color3.fromRGB(196, 54, 46) -- Red (#C4362E)
+		collar.Material = Enum.Material.SmoothPlastic
+		collar.CanCollide = false
+		collar.CanTouch = false
+		collar.CanQuery = false
+		collar.Massless = true
+		collar.CFrame = bunnyMesh.CFrame * CFrame.new(0, -0.25, -0.30) * CFrame.Angles(0, 0, math.rad(90))
+		collar.Parent = model
+
+		local cWeld = Instance.new("WeldConstraint")
+		cWeld.Name = "CollarWeld"
+		cWeld.Part0 = rootPart
+		cWeld.Part1 = collar
+		cWeld.Parent = collar
+	end
+
+	local carrotLeaf = model:FindFirstChild("CarrotLeaves") :: BasePart?
+	if not carrotLeaf then
+		carrotLeaf = Instance.new("Part")
+		carrotLeaf.Name = "CarrotLeaves"
+		carrotLeaf.Size = Vector3.new(0.16, 0.10, 0.12)
+		carrotLeaf.Shape = Enum.PartType.Block
+		carrotLeaf.Color = Color3.fromRGB(60, 175, 60) -- Green foliage (#3CAF3C)
+		carrotLeaf.Material = Enum.Material.SmoothPlastic
+		carrotLeaf.CanCollide = false
+		carrotLeaf.CanTouch = false
+		carrotLeaf.CanQuery = false
+		carrotLeaf.Massless = true
+		carrotLeaf.CFrame = bunnyMesh.CFrame * CFrame.new(0, -0.36, -0.42)
+		carrotLeaf.Parent = model
+
+		local lWeld = Instance.new("WeldConstraint")
+		lWeld.Name = "CarrotLeafWeld"
+		lWeld.Part0 = rootPart
+		lWeld.Part1 = carrotLeaf
+		lWeld.Parent = carrotLeaf
+	end
+
+	local carrot = model:FindFirstChild("Carrot") :: BasePart?
+	if not carrot then
+		carrot = Instance.new("Part")
+		carrot.Name = "Carrot"
+		carrot.Size = Vector3.new(0.18, 0.32, 0.18)
+		carrot.Shape = Enum.PartType.Cylinder
+		carrot.Color = Color3.fromRGB(245, 135, 30) -- Carrot orange (#F5871E)
+		carrot.Material = Enum.Material.SmoothPlastic
+		carrot.CanCollide = false
+		carrot.CanTouch = false
+		carrot.CanQuery = false
+		carrot.Massless = true
+		carrot.CFrame = bunnyMesh.CFrame * CFrame.new(0, -0.48, -0.42) * CFrame.Angles(0, 0, math.rad(90))
+		carrot.Parent = model
+
+		local crtWeld = Instance.new("WeldConstraint")
+		crtWeld.Name = "CarrotWeld"
+		crtWeld.Part0 = rootPart
+		crtWeld.Part1 = carrot
+		crtWeld.Parent = carrot
 	end
 
 	local animController = model:FindFirstChildOfClass("AnimationController")
