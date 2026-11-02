@@ -207,7 +207,8 @@ function QuestService.RecordProgress(
 		changed = QuestService.RecordProgressForProfile(mutableProfile, player.UserId, eventType, amount)
 	end)
 
-	if changed then
+	local mayorChanged = require(script.Parent:WaitForChild("MayorQuestService")).RecordProgress(player, eventType, amount)
+	if changed or mayorChanged then
 		ShovelInventoryService.SendStateSync(player)
 	end
 end
@@ -369,6 +370,7 @@ function QuestService.Start()
 		return
 	end
 	started = true
+	require(script.Parent:WaitForChild("MayorQuestService")).Start()
 
 	Remotes.OnServerInvoke("ClaimQuest", function(player: Player, questId: string): ClaimQuestResult
 		if type(questId) ~= "string" then
@@ -381,12 +383,22 @@ function QuestService.Start()
 		return QuestService.ClaimStreak(player)
 	end)
 
-	Players.PlayerAdded:Connect(function(player: Player)
-		local profile = PlayerState.Get(player)
-		if profile then
-			QuestService.EnsureProfileQuests(profile, player.UserId)
-		end
-	end)
+	local function setupPlayerQuests(player: Player)
+		task.spawn(function()
+			for _ = 1, 30 do
+				if player.Parent ~= Players then return end
+				local profile = PlayerState.Get(player)
+				if profile then
+					QuestService.EnsureProfileQuests(profile, player.UserId)
+					ShovelInventoryService.SendStateSync(player)
+					return
+				end
+				task.wait(0.5)
+			end
+		end)
+	end
+	Players.PlayerAdded:Connect(setupPlayerQuests)
+	for _, player in Players:GetPlayers() do setupPlayerQuests(player) end
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		activePerfectStreakByUserId[player.UserId] = nil

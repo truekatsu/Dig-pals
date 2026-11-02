@@ -1,4 +1,5 @@
 --!strict
+local NpcInputGuard = require(script.Parent:WaitForChild("NpcInputGuard"))
 local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 local NpcDialogue = require(script.Parent:WaitForChild("NpcDialogue"))
 -- Client UI controller for Hub Shovel Shop: 5 shop shovels with 3D previews, stats comparison, non-sequential purchase [U], and equip (Step 7)
@@ -394,6 +395,7 @@ function ShovelShopController.SelectShovel(shovelId: string)
 end
 
 function ShovelShopController.OpenDialogue(anchorPart: BasePart)
+	if NpcInputGuard.IsPromptBlocked() then return end
 	if LocalPlayer:GetAttribute("DigMinigameActive") == true then return end
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -1210,6 +1212,7 @@ function ShovelShopController.Start()
 	end)
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, _gameProcessed: boolean)
+		if NpcInputGuard.IsBlocked(input) then return end
 		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
 		end

@@ -1,0 +1,5 @@
+﻿Super Waffles by fsuarez913
+Source: https://www.dafont.com/super-waffles.font
+Author license statement: Free for personal use & commercial use.
+Downloaded from: https://dl.dafont.com/dl/?f=super_waffles
+Used as a rendered glyph atlas because Roblox cannot import TTF fonts.

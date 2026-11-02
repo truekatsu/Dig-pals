@@ -333,6 +333,12 @@ local function applyTutorial(step: any, done: any)
 	refreshUI()
 end
 
+-- Reuse the tutorial's objective text in the Main Quest tracker.
+function TutorialController.GetQuestObjective(step: number): (string, string, number)
+	local info = steps[math.clamp(math.floor(step), 1, #steps)]
+	return info.Title, info.Text, #steps
+end
+
 function TutorialController.GetStep(): (number, boolean)
 	return currentStep, isDone
 end

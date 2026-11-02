@@ -123,6 +123,14 @@ export type QuestEntry = {
 	Claimed: boolean,
 }
 
+export type MayorQuestEntry = {
+	Id: string,
+	Progress: number,
+	Target: number,
+	RewardCoins: number,
+	Claimed: boolean,
+}
+
 export type PlayerProfile = {
 	SchemaVersion: number,
 	Coins: number,
@@ -152,6 +160,7 @@ export type PlayerProfile = {
 		Day: number,
 		LastClaim: number,
 	},
+	MayorQuests: { Entries: { [string]: MayorQuestEntry } }?,
 	Tutorial: {
 		Step: number,
 		Done: boolean,
