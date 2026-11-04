@@ -43,6 +43,7 @@ export type InventorySnapshot = {
 	BasePets: { string },
 	Index: { Pets: { [string]: boolean }, Items: { [string]: boolean } }?,
 	Quests: { Day: number, List: { Types.QuestEntry } }?,
+	MayorQuests: any?,
 	Streak: { Day: number, LastClaim: number }?,
 	Title: string?,
 }
@@ -280,6 +281,7 @@ function ShovelInventoryService.BuildSnapshot(player: Player, profile: Types.Pla
 			Day = if profile.Quests then (profile.Quests.Day or 0) else 0,
 			List = if profile.Quests and profile.Quests.List then table.clone(profile.Quests.List) else {},
 		},
+		MayorQuests = require(script.Parent:WaitForChild("MayorQuestService")).BuildSnapshot(profile),
 		Streak = {
 			Day = if profile.Streak then (profile.Streak.Day or 0) else 0,
 			LastClaim = if profile.Streak then (profile.Streak.LastClaim or 0) else 0,

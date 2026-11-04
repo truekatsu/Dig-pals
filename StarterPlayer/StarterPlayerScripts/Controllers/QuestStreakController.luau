@@ -650,6 +650,8 @@ function QuestStreakController.Start()
 		return
 	end
 	started = true
+	require(script.Parent:WaitForChild("QuestTrackerController")).Start()
+	require(script.Parent:WaitForChild("MayorController")).Start()
 
 	buildUI()
 

@@ -1,4 +1,5 @@
 --!strict
+local NpcInputGuard = require(script.Parent:WaitForChild("NpcInputGuard"))
 -- MASTER HOTBAR & INVENTORY UI SYSTEM FOR DIG PALS
 -- Nine-slot expedition hotbar, shovel locker, and three-category field bag.
 -- Native Roblox UI components, responsive layout, smooth TweenService animations, and clean state management.
@@ -1296,6 +1297,7 @@ local function bindInputEvents()
 	end
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+		if NpcInputGuard.IsBlocked(input) then return end
 		if isTextInputActive() then
 			return
 		end

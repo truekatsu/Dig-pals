@@ -1,4 +1,5 @@
 --!strict
+local NpcInputGuard = require(script.Parent:WaitForChild("NpcInputGuard"))
 local CurrencyStyle = require(script.Parent:WaitForChild("CurrencyStyle"))
 local NpcDialogue = require(script.Parent:WaitForChild("NpcDialogue"))
 local Notifications = require(script.Parent:WaitForChild("NotificationController"))
@@ -466,6 +467,7 @@ function MerchantController.IsOpen(): boolean
 end
 
 function MerchantController.OpenDialogue(target: BasePart)
+	if NpcInputGuard.IsPromptBlocked() then return end
 	if LocalPlayer:GetAttribute("DigMinigameActive") then return end
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -1164,6 +1166,7 @@ function MerchantController.Start()
 	end)
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, _gameProcessed: boolean)
+		if NpcInputGuard.IsBlocked(input) then return end
 		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
 		end

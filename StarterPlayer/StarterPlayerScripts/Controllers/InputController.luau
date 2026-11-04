@@ -1,4 +1,5 @@
 --!strict
+local NpcInputGuard = require(script.Parent:WaitForChild("NpcInputGuard"))
 -- Unified Input Controller for PC Keyboard Shortcuts and Gamepad Support (Step 15)
 -- Enables quick access to all panels, escape/cancel modal closing, and console gamepad bindings.
 
@@ -133,6 +134,7 @@ local hotbarKeys = {
 }
 
 local function handleInputBegan(input: InputObject, gameProcessed: boolean)
+	if NpcInputGuard.IsBlocked(input) then return end
 	-- DigController owns strike/cancel input while every other game panel is hidden.
 	if Players.LocalPlayer:GetAttribute("DigMinigameActive") == true then return end
 	if isTextInputActive() then
